@@ -24,6 +24,10 @@ git them, point Obsidian at them. What Vortex Notes adds:
   `daily/YYYY-MM-DD.md`; you read them like a journal.
 - **Read-only mode** — connect an agent with `--read-only` and it can search and
   read but never write.
+- **Local web viewer** — `vortex-notes serve` opens your vault at
+  `http://127.0.0.1:7303`: crisp typographic rendering, dark/light themes,
+  clickable `[[wikilinks]]`, hybrid search, a source-view toggle, and live
+  reload when you or an agent edits a note.
 
 No accounts. No sync (yet — E2E-encrypted sync is what we're building next).
 No plugins. MIT.
@@ -57,6 +61,7 @@ Add `--read-only` to make the vault read-only for that client.
 ## Use it yourself
 
 ```sh
+vortex-notes serve                              # web viewer at 127.0.0.1:7303
 vortex-notes search "that idea about pricing"   # hybrid semantic + keyword
 vortex-notes index                              # rebuild the index manually
 ```

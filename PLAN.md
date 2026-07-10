@@ -22,7 +22,8 @@ Success signal: stars/installs/"finally" comments.
 - [x] Indexer: chunking (~1200 chars, heading context), FTS5, sqlite-vec, mtime-based resync, watcher
 - [x] Hybrid search: BM25 + vector, RRF fusion, max 2 chunks/note
 - [x] MCP tools: search_notes, read_note, write_note, edit_note (surgical), append_daily, recent_activity, list_notes; read-only mode; MCP annotations (readOnly/destructive hints)
-- [x] Tests: core (node:test) + MCP e2e over stdio
+- [x] Tests: core (node:test) + MCP e2e over stdio + web server e2e
+- [x] Local web viewer (`serve`, 127.0.0.1:7303): rendered markdown, wikilinks, search, dark/light, SSE live reload, source toggle. Read-only — editing arrives with Phase 1's editor.
 - [x] `build_context(topic)` tool — top notes in full + one hop of [[wikilinks]] incl. backlinks
 - [x] `remember(fact, supersedes)` tool — fact lifecycle as markdown (dated bullets, ^ids, strikethrough supersession)
 - [ ] Polish for launch: npm publish, GitHub repo (vortex-303/vortex-notes), OpenClaw skill, demo GIF

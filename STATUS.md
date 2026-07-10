@@ -19,7 +19,14 @@ product strategy artifact: https://claude.ai/code/artifact/0b58a836-a787-450f-ac
   milanesas note ranked #1; pure-semantic "why email cannot be sent from the
   VPS" → SMTP/port-25 note ranked #1 (zero keyword overlap)
 - File watcher reindexes on change (chokidar, 400ms debounce)
-- 13/13 tests (`npm test` after `npm run build`; embeddings disabled in tests
+- **Local web viewer** (`vortex-notes serve`, default 127.0.0.1:7303): server-
+  rendered markdown (marked), resolved [[wikilinks]] as app links, hybrid search
+  in sidebar, dark/light themes, source-view toggle, SSE live reload on file
+  change, /raw/ asset serving with path-escape guards, nonce CSP (note content
+  can't execute scripts). Read-only by design until Phase 1's editor.
+  Endpoints: / (shell), /api/notes, /api/note?path=, /api/search?q=,
+  /api/events (SSE), /raw/<path>. Binds 127.0.0.1 only.
+- 14/14 tests (`npm test` after `npm run build`; embeddings disabled in tests
   via VORTEX_NOTES_NO_SEMANTIC=1 so CI never downloads the model)
 - Schema migrations: index is a disposable cache — version mismatch drops all
   tables and rebuilds from the vault (verified live v1→v2)
@@ -45,6 +52,10 @@ product strategy artifact: https://claude.ai/code/artifact/0b58a836-a787-450f-ac
 - FTS/vec ghost rows: `DELETE FROM fts_chunks` on an external-content table
   doesn't error but may leave ghosts; results stay correct because the chunk
   join filters them. Schema-bump rebuild clears them periodically.
+- **chokidar keeps the event loop alive**: any process that starts the vault
+  watcher must hold the handle from `startVaultWatcher()` and `close()` it, or
+  it never exits (this hung the test runner). `startWebServer` returns
+  `close()` which tears down SSE clients, watcher, HTTP server, and DB.
 
 ## Next (launch prep, needs user)
 1. GitHub repo vortex-303/vortex-notes (private until launch), npm publish

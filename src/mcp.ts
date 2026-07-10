@@ -4,7 +4,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { Vault, slugify } from "./vault.js";
-import { Indexer } from "./indexer.js";
+import { Indexer, startVaultWatcher } from "./indexer.js";
 import { search } from "./search.js";
 import { buildContext } from "./context.js";
 
@@ -23,7 +23,7 @@ export async function startMcpServer(vault: Vault, opts: McpOptions): Promise<vo
     (err) => console.error(`[vortex-notes] index error: ${err.message}`)
   );
 
-  if (opts.watch) startWatcher(vault, indexer);
+  if (opts.watch) startVaultWatcher(vault, indexer);
 
   const server = new McpServer({ name: "vortex-notes", version: "0.1.0" });
   const text = (s: string) => ({ content: [{ type: "text" as const, text: s }] });
@@ -241,33 +241,4 @@ export async function startMcpServer(vault: Vault, opts: McpOptions): Promise<vo
   console.error(
     `[vortex-notes] MCP server on stdio | vault: ${vault.root}${opts.readOnly ? " | READ-ONLY" : ""}`
   );
-}
-
-function startWatcher(vault: Vault, indexer: Indexer): void {
-  void import("chokidar").then(({ default: chokidar }) => {
-    const timers = new Map<string, NodeJS.Timeout>();
-    chokidar
-      .watch(vault.root, {
-        ignored: (p: string) => p.split(path.sep).some((seg) => seg.startsWith(".")),
-        ignoreInitial: true,
-      })
-      .on("all", (_event: string, absPath: string) => {
-        if (!absPath.endsWith(".md")) return;
-        const rel = vault.rel(absPath);
-        if (!vault.isNotePath(rel)) return;
-        clearTimeout(timers.get(rel));
-        timers.set(
-          rel,
-          setTimeout(() => {
-            timers.delete(rel);
-            try {
-              indexer.indexNote(rel);
-              void indexer.embedPending();
-            } catch (err) {
-              console.error(`[vortex-notes] reindex failed for ${rel}: ${(err as Error).message}`);
-            }
-          }, 400)
-        );
-      });
-  });
 }

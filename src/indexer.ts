@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { sep as pathSep } from "node:path";
 import Database from "better-sqlite3";
 import * as sqliteVec from "sqlite-vec";
 import { Vault, titleFromPath } from "./vault.js";
@@ -221,6 +222,56 @@ export class Indexer {
   close(): void {
     this.db.close();
   }
+}
+
+/**
+ * Watch the vault and reindex changed notes (debounced). onChange fires after
+ * reindex. Returns a handle whose close() releases the watcher — without it,
+ * the process never exits (chokidar keeps the event loop alive).
+ */
+export function startVaultWatcher(
+  vault: Vault,
+  indexer: Indexer,
+  onChange?: (rel: string) => void
+): { close: () => Promise<void> } {
+  let watcher: { close: () => Promise<void> } | null = null;
+  let closed = false;
+  const timers = new Map<string, NodeJS.Timeout>();
+  void import("chokidar").then(({ default: chokidar }) => {
+    if (closed) return;
+    watcher = chokidar
+      .watch(vault.root, {
+        ignored: (p: string) => p.split(pathSep).some((seg) => seg.startsWith(".")),
+        ignoreInitial: true,
+      })
+      .on("all", (_event: string, absPath: string) => {
+        if (!absPath.endsWith(".md")) return;
+        const rel = vault.rel(absPath);
+        if (!vault.isNotePath(rel)) return;
+        clearTimeout(timers.get(rel));
+        timers.set(
+          rel,
+          setTimeout(() => {
+            timers.delete(rel);
+            try {
+              indexer.indexNote(rel);
+              void indexer.embedPending();
+              onChange?.(rel);
+            } catch (err) {
+              console.error(`[vortex-notes] reindex failed for ${rel}: ${(err as Error).message}`);
+            }
+          }, 400)
+        );
+      });
+  });
+  return {
+    close: async () => {
+      closed = true;
+      for (const t of timers.values()) clearTimeout(t);
+      timers.clear();
+      await watcher?.close();
+    },
+  };
 }
 
 /** Extract [[wikilink]] targets, ignoring #heading fragments and |aliases. */

@@ -3,6 +3,7 @@ import { Vault } from "./vault.js";
 import { Indexer } from "./indexer.js";
 import { search } from "./search.js";
 import { startMcpServer } from "./mcp.js";
+import { startWebServer } from "./server.js";
 
 const HELP = `vortex-notes — markdown vault with a first-party MCP server and local semantic search
 
@@ -10,6 +11,8 @@ Usage:
   vortex-notes init [--vault <dir>]           Create a vault (default: ~/VortexNotes)
   vortex-notes mcp [--vault <dir>] [--read-only] [--no-watch]
                                                Start the MCP server (stdio)
+  vortex-notes serve [--vault <dir>] [--port <n>]
+                                               Local web viewer (default http://127.0.0.1:7303)
   vortex-notes index [--vault <dir>]           (Re)build the search index
   vortex-notes search <query> [--vault <dir>] [--keyword]
                                                Search from the terminal
@@ -34,7 +37,7 @@ function parseArgs(argv: string[]): Args {
     const a = argv[i];
     if (a.startsWith("--")) {
       const key = a.slice(2);
-      if (key === "vault") args.flags.set(key, argv[++i]);
+      if (key === "vault" || key === "port") args.flags.set(key, argv[++i]);
       else args.flags.set(key, true);
     } else {
       args.positional.push(a);
@@ -76,6 +79,13 @@ async function main(): Promise<void> {
         console.log(r.snippet.replace(/\n/g, " ").slice(0, 200));
       }
       indexer.close();
+      break;
+    }
+    case "serve": {
+      requireVault(vault);
+      const port = Number(args.flags.get("port") ?? 7303);
+      const { port: actual } = await startWebServer(vault, { port });
+      console.log(`Vortex Notes → http://127.0.0.1:${actual}  (vault: ${vault.root})`);
       break;
     }
     case "mcp": {

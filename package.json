@@ -33,6 +33,7 @@
     "better-sqlite3": "^11.8.0",
     "chokidar": "^4.0.3",
     "gray-matter": "^4.0.3",
+    "marked": "^15.0.12",
     "sqlite-vec": "^0.1.6",
     "ulid": "^2.3.0",
     "zod": "^3.24.0"
