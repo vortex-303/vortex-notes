@@ -1,12 +1,17 @@
 # Vortex Notes — Status
 
-**Phase 0 core: BUILT & VERIFIED (2026-07-10).** See PLAN.md for phases; full product
-strategy artifact: https://claude.ai/code/artifact/0b58a836-a787-450f-ac70-84ff821074f4
+**Phase 0 COMPLETE incl. signature tools (2026-07-10).** See PLAN.md for phases; full
+product strategy artifact: https://claude.ai/code/artifact/0b58a836-a787-450f-ac70-84ff821074f4
 
 ## What works (verified, not just typechecked)
 - `vortex-notes init/index/search/mcp` CLI
-- MCP server over stdio, 7 tools, e2e-tested with the MCP SDK client
-  (write → read → surgical edit → search → daily → recent_activity)
+- MCP server over stdio, 9 tools, e2e-tested with the MCP SDK client
+  (write → read → surgical edit → search → daily → recent → remember/supersede → build_context)
+- `remember(fact, topic?, supersedes?)`: dated bullets with `^f-…` ids in
+  memory/*.md; supersession = strikethrough + pointer, never deletion;
+  supersede by id or distinctive substring; double-supersede rejected
+- `build_context(topic)`: top search hits in full (2.5k cap each) + one hop of
+  [[wikilinks]] both directions (links table populated at index time)
 - Read-only mode blocks writes (tested)
 - Hybrid search: FTS5 BM25 + sqlite-vec (multilingual-e5-small, q8, via
   transformers.js), RRF fusion, max 2 chunks/note
@@ -14,8 +19,10 @@ strategy artifact: https://claude.ai/code/artifact/0b58a836-a787-450f-ac70-84ff8
   milanesas note ranked #1; pure-semantic "why email cannot be sent from the
   VPS" → SMTP/port-25 note ranked #1 (zero keyword overlap)
 - File watcher reindexes on change (chokidar, 400ms debounce)
-- 10/10 tests (`npm test` after `npm run build`; embeddings disabled in tests
+- 13/13 tests (`npm test` after `npm run build`; embeddings disabled in tests
   via VORTEX_NOTES_NO_SEMANTIC=1 so CI never downloads the model)
+- Schema migrations: index is a disposable cache — version mismatch drops all
+  tables and rebuilds from the vault (verified live v1→v2)
 
 ## Hard-won details
 - **Keyword-leg pollution**: RRF treats any FTS hit as evidence, so stopwords
@@ -32,9 +39,14 @@ strategy artifact: https://claude.ai/code/artifact/0b58a836-a787-450f-ac70-84ff8
 - Embedding model: first `index`/`mcp` run downloads ~120MB to HF cache
   (~/.cache/huggingface). Vault index at `.vortex/index.db`, disposable.
 
-## Next (Phase 0 finish → launch)
-1. `build_context(topic)` tool (follow [[wikilinks]] from search hits)
-2. `remember(fact, supersedes)` tool
-3. GitHub repo vortex-303/vortex-notes (private until launch), npm publish
-4. OpenClaw skill + demo GIF + Show HN draft
-5. Then Phase 1: E2EE sync + web app (see PLAN.md)
+## Hard-won details (round 2)
+- **Titles weren't searchable** — FTS only indexed chunk text; fixed by using the
+  note title as heading context for heading-less chunks (also improves embeddings).
+- FTS/vec ghost rows: `DELETE FROM fts_chunks` on an external-content table
+  doesn't error but may leave ghosts; results stay correct because the chunk
+  join filters them. Schema-bump rebuild clears them periodically.
+
+## Next (launch prep, needs user)
+1. GitHub repo vortex-303/vortex-notes (private until launch), npm publish
+2. OpenClaw skill + demo GIF + Show HN draft
+3. Then Phase 1: E2EE sync + web app (see PLAN.md)

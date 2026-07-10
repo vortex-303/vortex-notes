@@ -151,6 +151,53 @@ export class Vault {
     return `daily/${day}.md`;
   }
 
+  /**
+   * Record a durable fact as a dated bullet in memory/<topic>.md. When it
+   * supersedes an earlier fact, the old line stays visible with strikethrough
+   * and a pointer to the new fact's id — history is never silently erased.
+   */
+  rememberFact(
+    fact: string,
+    topic?: string,
+    supersedes?: string
+  ): { rel: string; id: string; superseded?: string } {
+    const rel = `memory/${topic ? slugify(topic) : "facts"}.md`;
+    const abs = this.abs(rel);
+    const id = "f-" + ulid().slice(-8).toLowerCase();
+    const today = new Date().toISOString().slice(0, 10);
+    const line = `- **${today}** ${fact.trim().replace(/\n+/g, " ")} \`^${id}\``;
+
+    if (!fs.existsSync(abs)) {
+      if (supersedes) throw new Error(`No facts recorded yet under ${rel}; nothing to supersede.`);
+      this.writeNote(rel, topic ? `Facts — ${topic}` : "Facts", line, ["memory"]);
+      return { rel, id };
+    }
+
+    const note = this.readNote(rel);
+    let body = note.body;
+    let superseded: string | undefined;
+    if (supersedes) {
+      const key = supersedes.replace(/^\^/, "").trim();
+      const lines = body.split("\n");
+      const byId = (l: string) => l.includes(`^${key}\``);
+      const byText = (l: string) =>
+        l.startsWith("- ") && !l.includes("~~") && l.toLowerCase().includes(key.toLowerCase());
+      const idx = lines.findIndex(key.startsWith("f-") ? byId : (l) => byId(l) || byText(l));
+      if (idx === -1) {
+        throw new Error(
+          `No fact matching "${supersedes}" in ${rel}. Pass the fact's ^id or a distinctive substring.`
+        );
+      }
+      const old = lines[idx];
+      if (old.includes("~~")) throw new Error(`That fact is already superseded: ${old.trim()}`);
+      lines[idx] = `- ~~${old.replace(/^-\s*/, "")}~~ → superseded ${today} by \`^${id}\``;
+      body = lines.join("\n");
+      superseded = old.match(/\^(f-[a-z0-9]+)/)?.[1];
+    }
+    this.updateNote(rel, body.trimEnd() + "\n" + line);
+    return { rel, id, superseded };
+  }
+
   appendDaily(content: string, date?: string): string {
     const rel = this.dailyPath(date);
     const abs = this.abs(rel);

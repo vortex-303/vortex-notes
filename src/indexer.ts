@@ -4,7 +4,7 @@ import * as sqliteVec from "sqlite-vec";
 import { Vault, titleFromPath } from "./vault.js";
 import { EMBED_DIM, embedPassages, isSemanticDisabled } from "./embeddings.js";
 
-const SCHEMA_VERSION = "1";
+const SCHEMA_VERSION = "2";
 
 export interface Chunk {
   text: string;
@@ -32,8 +32,22 @@ export class Indexer {
   }
 
   private migrate(): void {
+    this.db.exec(`CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);`);
+    const ver = this.db.prepare("SELECT value FROM meta WHERE key='schema'").get() as
+      | { value: string }
+      | undefined;
+    if (ver && ver.value !== SCHEMA_VERSION) {
+      // Index is a disposable cache — on schema change, rebuild from the vault.
+      console.error(`[vortex-notes] index schema ${ver.value} → ${SCHEMA_VERSION}, rebuilding index`);
+      this.db.exec(`
+        DROP TABLE IF EXISTS fts_chunks;
+        DROP TABLE IF EXISTS vec_chunks;
+        DROP TABLE IF EXISTS links;
+        DROP TABLE IF EXISTS chunks;
+        DROP TABLE IF EXISTS notes;
+      `);
+    }
     this.db.exec(`
-      CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
       CREATE TABLE IF NOT EXISTS notes (
         path TEXT PRIMARY KEY,
         title TEXT NOT NULL,
@@ -51,6 +65,11 @@ export class Indexer {
         embedded INTEGER NOT NULL DEFAULT 0
       );
       CREATE INDEX IF NOT EXISTS chunks_path ON chunks(path);
+      CREATE TABLE IF NOT EXISTS links (
+        from_path TEXT NOT NULL,
+        target TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS links_from ON links(from_path);
       CREATE VIRTUAL TABLE IF NOT EXISTS fts_chunks USING fts5(
         text, heading, path UNINDEXED,
         content='chunks', content_rowid='id',
@@ -62,12 +81,9 @@ export class Indexer {
         `CREATE VIRTUAL TABLE IF NOT EXISTS vec_chunks USING vec0(embedding float[${EMBED_DIM}]);`
       );
     }
-    const ver = this.db.prepare("SELECT value FROM meta WHERE key='schema'").get() as
-      | { value: string }
-      | undefined;
-    if (!ver) {
-      this.db.prepare("INSERT INTO meta (key, value) VALUES ('schema', ?)").run(SCHEMA_VERSION);
-    }
+    this.db
+      .prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('schema', ?)")
+      .run(SCHEMA_VERSION);
   }
 
   /** Sync the index with the vault. Returns number of notes (re)indexed. */
@@ -138,9 +154,13 @@ export class Indexer {
         "INSERT INTO fts_chunks (rowid, text, heading, path) VALUES (?, ?, ?, ?)"
       );
       for (const c of chunks) {
-        const { lastInsertRowid } = insChunk.run(rel, c.heading, c.pos, c.text);
-        insFts.run(lastInsertRowid, c.text, c.heading, rel);
+        // Title stands in as heading context so titles are searchable too.
+        const heading = c.heading || note.title;
+        const { lastInsertRowid } = insChunk.run(rel, heading, c.pos, c.text);
+        insFts.run(lastInsertRowid, c.text, heading, rel);
       }
+      const insLink = this.db.prepare("INSERT INTO links (from_path, target) VALUES (?, ?)");
+      for (const target of extractWikilinks(note.body)) insLink.run(rel, target);
     });
     tx();
   }
@@ -162,6 +182,7 @@ export class Indexer {
       delVec?.run(id);
     }
     this.db.prepare("DELETE FROM chunks WHERE path=?").run(rel);
+    this.db.prepare("DELETE FROM links WHERE from_path=?").run(rel);
   }
 
   /** Embed chunks that don't have vectors yet (batched). */
@@ -200,6 +221,16 @@ export class Indexer {
   close(): void {
     this.db.close();
   }
+}
+
+/** Extract [[wikilink]] targets, ignoring #heading fragments and |aliases. */
+export function extractWikilinks(body: string): string[] {
+  const targets = new Set<string>();
+  for (const m of body.matchAll(/\[\[([^\][|#]+)(?:#[^\][|]*)?(?:\|[^\]]*)?\]\]/g)) {
+    const t = m[1].trim();
+    if (t) targets.add(t);
+  }
+  return [...targets];
 }
 
 /**

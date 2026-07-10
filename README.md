@@ -8,8 +8,15 @@ git them, point Obsidian at them. What Vortex Notes adds:
 
 - **First-party MCP server** — Claude Code, OpenClaw, Cursor, or any MCP client can
   search, read, and write your notes through task-shaped tools (`search_notes`,
-  `read_note`, `write_note`, `edit_note`, `append_daily`, `recent_activity`), not a
-  CRUD API mirror. Works headless: no app needs to be open.
+  `read_note`, `write_note`, `edit_note`, `append_daily`, `recent_activity`,
+  `build_context`, `remember`), not a CRUD API mirror. Works headless: no app
+  needs to be open.
+- **Facts with a lifecycle** — `remember(fact, supersedes)` records dated facts in
+  `memory/*.md`; superseded facts stay visible with strikethrough and a pointer to
+  what replaced them. Your agent's beliefs are auditable markdown, not a black box.
+- **One-call context** — `build_context(topic)` returns the top notes in full plus
+  one hop of `[[wikilinks]]` (including backlinks), so agents start a task with
+  the right context instead of five search round-trips.
 - **Local hybrid semantic search** — BM25 + multilingual embeddings (SQLite FTS5 +
   sqlite-vec + a small on-device model). No API key, no cloud, nothing leaves your
   machine. Works in English, Spanish, and ~100 other languages.

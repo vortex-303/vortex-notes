@@ -6,6 +6,7 @@ import { z } from "zod";
 import { Vault, slugify } from "./vault.js";
 import { Indexer } from "./indexer.js";
 import { search } from "./search.js";
+import { buildContext } from "./context.js";
 
 export interface McpOptions {
   readOnly: boolean;
@@ -147,6 +148,44 @@ export async function startMcpServer(vault: Vault, opts: McpOptions): Promise<vo
       indexer.indexNote(rel);
       void indexer.embedPending();
       return text(`Appended to ${rel}`);
+    }
+  );
+
+  server.registerTool(
+    "build_context",
+    {
+      title: "Build context",
+      description:
+        "Load working context for a topic in one call: full content of the top-matching notes plus one hop of [[wikilinked]] notes as pointers. Prefer this over multiple search+read rounds when starting work on a topic.",
+      inputSchema: {
+        topic: z.string().describe("Topic, question, or entity to build context for"),
+        max_notes: z.number().int().min(1).max(10).optional().describe("Primary notes to include in full (default 4)"),
+      },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ topic, max_notes }) => text(await buildContext(indexer, topic, max_notes ?? 4))
+  );
+
+  server.registerTool(
+    "remember",
+    {
+      title: "Remember a fact",
+      description:
+        "Record a durable fact in the shared memory (memory/*.md) as a dated bullet with a stable ^id. If it replaces an earlier fact, pass supersedes (the old fact's ^id, or a distinctive substring of it) — the old fact stays visible with strikethrough and a pointer to the new one. Use search_notes to find existing facts first.",
+      inputSchema: {
+        fact: z.string().describe("The fact, stated so it makes sense without conversation context"),
+        topic: z.string().optional().describe("Optional topic — facts go to memory/<topic>.md instead of memory/facts.md"),
+        supersedes: z.string().optional().describe("^id or distinctive substring of the fact this replaces"),
+      },
+    },
+    async ({ fact, topic, supersedes }) => {
+      guardWrite();
+      const r = vault.rememberFact(fact, topic, supersedes);
+      indexer.indexNote(r.rel);
+      void indexer.embedPending();
+      return text(
+        `Recorded ^${r.id} in ${r.rel}${r.superseded ? ` (supersedes ^${r.superseded})` : ""}`
+      );
     }
   );
 

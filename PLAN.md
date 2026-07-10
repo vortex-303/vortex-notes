@@ -23,9 +23,9 @@ Success signal: stars/installs/"finally" comments.
 - [x] Hybrid search: BM25 + vector, RRF fusion, max 2 chunks/note
 - [x] MCP tools: search_notes, read_note, write_note, edit_note (surgical), append_daily, recent_activity, list_notes; read-only mode; MCP annotations (readOnly/destructive hints)
 - [x] Tests: core (node:test) + MCP e2e over stdio
+- [x] `build_context(topic)` tool — top notes in full + one hop of [[wikilinks]] incl. backlinks
+- [x] `remember(fact, supersedes)` tool — fact lifecycle as markdown (dated bullets, ^ids, strikethrough supersession)
 - [ ] Polish for launch: npm publish, GitHub repo (vortex-303/vortex-notes), OpenClaw skill, demo GIF
-- [ ] `build_context(topic)` tool (follow [[wikilinks]] from search hits)
-- [ ] `remember(fact, supersedes)` tool — fact lifecycle as markdown annotations
 
 ### Phase 1 — E2EE sync + web app (~6–8 wks)
 Yjs canonical (Y.Doc per note), daemon materializes the md vault as projection;

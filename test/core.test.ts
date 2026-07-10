@@ -4,8 +4,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { Vault, slugify } from "../src/vault.js";
-import { Indexer, chunkMarkdown } from "../src/indexer.js";
+import { Indexer, chunkMarkdown, extractWikilinks } from "../src/indexer.js";
 import { search } from "../src/search.js";
+import { buildContext } from "../src/context.js";
 
 process.env.VORTEX_NOTES_NO_SEMANTIC = "1"; // keyword-only in tests (no model download)
 
@@ -86,6 +87,45 @@ test("reindexing a changed note updates search", async () => {
   assert.equal(hits[0]?.path, "a.md");
   const stale = await search(indexer, "astronomy", 5, "keyword");
   assert.ok(!stale.some((h) => h.path === "a.md"));
+  indexer.close();
+});
+
+test("extractWikilinks handles aliases, headings, dedup", () => {
+  const links = extractWikilinks(
+    "See [[Alpha]] and [[Beta|the beta note]] and [[Gamma#section]] and [[Alpha]] again. Not a link: [x]."
+  );
+  assert.deepEqual(links.sort(), ["Alpha", "Beta", "Gamma"]);
+});
+
+test("rememberFact records and supersedes with visible history", () => {
+  const vault = tmpVault();
+  const r1 = vault.rememberFact("Relay runs on port 4000");
+  const r2 = vault.rememberFact("Relay runs on port 5000", undefined, r1.id);
+  assert.equal(r2.superseded, r1.id);
+  const body = vault.readNote(r1.rel).body;
+  assert.match(body, /~~.*port 4000.*~~/);
+  assert.match(body, new RegExp(`superseded \\d{4}-\\d{2}-\\d{2} by \`\\^${r2.id}\``));
+  // supersede by substring
+  const r3 = vault.rememberFact("Relay moved to Fly.io", undefined, "port 5000");
+  assert.equal(r3.superseded, r2.id);
+  // superseding an already-dead fact fails
+  assert.throws(() => vault.rememberFact("nope", undefined, r1.id), /already superseded/);
+  // topic goes to its own file
+  const t = vault.rememberFact("Prefers dark mode", "user-prefs");
+  assert.equal(t.rel, "memory/user-prefs.md");
+});
+
+test("buildContext includes primaries, outgoing links, and backlinks", async () => {
+  const vault = tmpVault();
+  vault.writeNote("wombats.md", "Wombat Research", "Wombats dig burrows. Methodology in [[Field Protocol]].");
+  vault.writeNote("field-protocol.md", "Field Protocol", "Count burrows at dawn.");
+  vault.writeNote("funding.md", "Funding", "Grant covers [[Wombat Research]] until 2027.");
+  const indexer = new Indexer(vault);
+  await indexer.indexAll();
+  const ctx = await buildContext(indexer, "wombat burrows", 1);
+  assert.match(ctx, /Wombats dig burrows/); // primary, full content
+  assert.match(ctx, /field-protocol\.md/); // outgoing link
+  assert.match(ctx, /funding\.md/); // backlink
   indexer.close();
 });
 
