@@ -1,0 +1,46 @@
+{
+  "name": "vortex-notes",
+  "version": "0.1.0",
+  "description": "Markdown notes with a first-party MCP server and zero-config local semantic search. The vault your agents can actually use.",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "vortex-notes": "dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/cli.ts",
+    "test": "node --test \"dist-test/test/*.test.js\"",
+    "pretest": "tsc -p tsconfig.test.json"
+  },
+  "keywords": [
+    "mcp",
+    "notes",
+    "markdown",
+    "agent-memory",
+    "knowledge-base",
+    "semantic-search"
+  ],
+  "dependencies": {
+    "@huggingface/transformers": "^3.3.0",
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "better-sqlite3": "^11.8.0",
+    "chokidar": "^4.0.3",
+    "gray-matter": "^4.0.3",
+    "sqlite-vec": "^0.1.6",
+    "ulid": "^2.3.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}
