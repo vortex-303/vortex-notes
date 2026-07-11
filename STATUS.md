@@ -19,13 +19,18 @@ product strategy artifact: https://claude.ai/code/artifact/0b58a836-a787-450f-ac
   milanesas note ranked #1; pure-semantic "why email cannot be sent from the
   VPS" → SMTP/port-25 note ranked #1 (zero keyword overlap)
 - File watcher reindexes on change (chokidar, 400ms debounce)
-- **Local web viewer** (`vortex-notes serve`, default 127.0.0.1:7303): server-
+- **Local web app** (`vortex-notes serve`, default 127.0.0.1:7303): server-
   rendered markdown (marked), resolved [[wikilinks]] as app links, hybrid search
   in sidebar, dark/light themes, source-view toggle, SSE live reload on file
   change, /raw/ asset serving with path-escape guards, nonce CSP (note content
-  can't execute scripts). Read-only by design until Phase 1's editor.
-  Endpoints: / (shell), /api/notes, /api/note?path=, /api/search?q=,
-  /api/events (SSE), /raw/<path>. Binds 127.0.0.1 only.
+  can't execute scripts). **Editing**: ＋ new note (folder/Title syntax),
+  markdown editor (Cmd/Ctrl+S, frontmatter preserved), delete w/ confirm, daily
+  quick-capture in sidebar. Textarea for now — TipTap/CRDT editor is Phase 1.
+  Endpoints: / (shell), GET/POST/PUT/DELETE /api/note, /api/notes,
+  /api/search?q=, POST /api/daily, /api/events (SSE), /raw/<path>. Binds
+  127.0.0.1 only; mutations require Content-Type: application/json (CSRF guard:
+  cross-origin pages can't preflight). SSE reload never clobbers an open editor.
+  User's live vault: their Obsidian vault ~/Documents/main.
 - 14/14 tests (`npm test` after `npm run build`; embeddings disabled in tests
   via VORTEX_NOTES_NO_SEMANTIC=1 so CI never downloads the model)
 - Schema migrations: index is a disposable cache — version mismatch drops all
