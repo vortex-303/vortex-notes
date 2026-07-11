@@ -4,6 +4,8 @@ import { Indexer } from "./indexer.js";
 import { search } from "./search.js";
 import { startMcpServer } from "./mcp.js";
 import { startWebServer } from "./server.js";
+import { initIdentity, loginIdentity, loadIdentity, hasIdentity, vortexHome } from "./identity.js";
+import { createSpace, listSpaces, getSpace, openSpaceKey, encryptDoc, decryptDoc } from "./spaces.js";
 
 const HELP = `vortex-notes — markdown vault with a first-party MCP server and local semantic search
 
@@ -16,6 +18,12 @@ Usage:
   vortex-notes index [--vault <dir>]           (Re)build the search index
   vortex-notes search <query> [--vault <dir>] [--keyword]
                                                Search from the terminal
+
+  vortex-notes identity init [--name <device>]  Create your identity (shows recovery phrase ONCE)
+  vortex-notes identity login [--name <device>] Sign in on this machine with your phrase
+  vortex-notes identity show                    Fingerprint + device info
+  vortex-notes space create <name>              Create an encrypted space
+  vortex-notes space list                       List spaces on this machine
 
 Vault resolution: --vault flag > VORTEX_NOTES_VAULT env > cwd if it has .vortex > ~/VortexNotes
 Set VORTEX_NOTES_NO_SEMANTIC=1 to disable embeddings (keyword search only).`;
@@ -37,7 +45,7 @@ function parseArgs(argv: string[]): Args {
     const a = argv[i];
     if (a.startsWith("--")) {
       const key = a.slice(2);
-      if (key === "vault" || key === "port") args.flags.set(key, argv[++i]);
+      if (key === "vault" || key === "port" || key === "name") args.flags.set(key, argv[++i]);
       else args.flags.set(key, true);
     } else {
       args.positional.push(a);
@@ -96,6 +104,67 @@ async function main(): Promise<void> {
       // Keep process alive; transport closes on stdin end.
       break;
     }
+    case "identity": {
+      const sub = args.positional[0];
+      const deviceName = (args.flags.get("name") as string) ?? `${process.env.USER ?? "device"}@${(await import("node:os")).default.hostname()}`;
+      if (sub === "init") {
+        const { phrase, identity } = initIdentity(deviceName);
+        console.log("Your recovery phrase — write it down now, it is shown ONCE and never stored:\n");
+        console.log(`  ${phrase}\n`);
+        console.log("Anyone with these 12 words can read your notes. There is no reset:");
+        console.log("lose the phrase and your devices, and the data is unrecoverable by design.\n");
+        console.log(`Account fingerprint: ${identity.file.fingerprint}`);
+        console.log(`Device enrolled:     ${identity.file.device.name}`);
+        console.log(`Stored at:           ${vortexHome()}`);
+      } else if (sub === "login") {
+        const phrase = await promptHidden("Enter your 12-word recovery phrase: ");
+        const identity = loginIdentity(phrase, deviceName);
+        console.log(`\nSigned in. Account fingerprint: ${identity.file.fingerprint}`);
+        console.log(`Device enrolled: ${identity.file.device.name}`);
+      } else if (sub === "show") {
+        const id = loadIdentity();
+        console.log(`Account fingerprint: ${id.file.fingerprint}`);
+        console.log(`Device:              ${id.file.device.name} (enrolled ${id.file.device.createdAt.slice(0, 10)})`);
+        console.log(`Device cert:         valid`);
+        console.log(`Home:                ${vortexHome()}`);
+      } else {
+        fail("Usage: vortex-notes identity <init|login|show>");
+      }
+      break;
+    }
+    case "space": {
+      const sub = args.positional[0];
+      if (sub === "create") {
+        const name = args.positional.slice(1).join(" ").trim();
+        if (!name) fail("Usage: vortex-notes space create <name>");
+        const identity = loadIdentity();
+        const space = createSpace(identity, name);
+        // Sanity roundtrip so a broken keychain fails loudly at create time.
+        const key = openSpaceKey(identity, space);
+        decryptDoc(key, "probe", encryptDoc(key, "probe", "ok"));
+        console.log(`Created encrypted space "${name}" (${space.id}).`);
+      } else if (sub === "list") {
+        const spaces = listSpaces();
+        if (!spaces.length) {
+          console.log("No spaces yet. Create one: vortex-notes space create <name>");
+          break;
+        }
+        const canOpen = hasIdentity() ? loadIdentity() : null;
+        for (const s of spaces) {
+          let status = "no key on this device";
+          if (canOpen) {
+            try {
+              openSpaceKey(canOpen, s);
+              status = "unlockable here";
+            } catch { /* keep default */ }
+          }
+          console.log(`${s.id}  ${s.name}  (${Object.keys(s.sealedKeys).length} member keys, ${status})`);
+        }
+      } else {
+        fail("Usage: vortex-notes space <create|list>");
+      }
+      break;
+    }
     case undefined:
     case "help": {
       console.log(HELP);
@@ -115,6 +184,37 @@ function requireVault(vault: Vault): void {
 function fail(msg: string): never {
   console.error(msg);
   process.exit(1);
+}
+
+/** Read a line from the terminal without echoing it (recovery phrases). */
+async function promptHidden(question: string): Promise<string> {
+  const { createInterface } = await import("node:readline");
+  process.stderr.write(question);
+  const rl = createInterface({ input: process.stdin, terminal: true });
+  const wasRaw = process.stdin.isRaw;
+  if (process.stdin.isTTY) process.stdin.setRawMode(true);
+  return new Promise((resolve) => {
+    let value = "";
+    const onData = (chunk: Buffer) => {
+      for (const ch of chunk.toString("utf8")) {
+        if (ch === "\r" || ch === "\n") {
+          process.stdin.off("data", onData);
+          if (process.stdin.isTTY) process.stdin.setRawMode(wasRaw ?? false);
+          rl.close();
+          process.stderr.write("\n");
+          resolve(value.trim());
+          return;
+        } else if (ch === "\u0003") { // Ctrl-C
+          process.exit(130);
+        } else if (ch === "\u007f" || ch === "\b") { // backspace
+          value = value.slice(0, -1);
+        } else {
+          value += ch;
+        }
+      }
+    };
+    process.stdin.on("data", onData);
+  });
 }
 
 main().catch((err) => fail(`Error: ${(err as Error).message}`));

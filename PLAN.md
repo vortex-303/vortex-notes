@@ -28,7 +28,23 @@ Success signal: stars/installs/"finally" comments.
 - [x] `remember(fact, supersedes)` tool — fact lifecycle as markdown (dated bullets, ^ids, strikethrough supersession)
 - [ ] Polish for launch: npm publish, GitHub repo (vortex-303/vortex-notes), OpenClaw skill, demo GIF
 
-### Phase 1 — E2EE sync + web app (~6–8 wks)
+### Phase 1 — E2EE sync + web app (~6–8 wks) — IN PROGRESS
+Slices, each shippable:
+- [x] **1a. Identity** (2026-07-11): BIP39 12-word phrase → HKDF → account Ed25519+X25519;
+  random device keypairs certified by account key; phrase shown once, never stored;
+  device secrets 0600 in ~/.vortex-notes; spaces with sealed keys (device + account
+  + grantable to any principal — the Phase 2 agent-grant mechanism already works);
+  XChaCha20-Poly1305 payloads with AAD doc binding; CLI `identity init/login/show`,
+  `space create/list` with hidden phrase input. noble/scure stack (audited, MIT).
+- [ ] **1b. Relay**: dumb ciphertext store (Node, Fly.io) — per-space encrypted
+  snapshot + update log, WebSocket fanout, signed requests, device registry
+  (evolve persona-cloud relay shape + secsync protocol design)
+- [ ] **1c. Vault↔space sync**: encrypt notes client-side per space, push/pull via
+  relay, md files stay the local projection; second device gets the vault
+- [ ] **1d. Web app unlock**: hosted PWA — phrase unlock client-side (keys in
+  IndexedDB), read+edit synced spaces; the serve UI becomes this app
+- [ ] **1e. Editor**: TipTap (MIT core) + CodeMirror source toggle; per-note Yjs
+  docs stored encrypted (decision point: plain-blob LWW first, CRDT after)
 Yjs canonical (Y.Doc per note), daemon materializes the md vault as projection;
 secsync-pattern encrypted relay (dumb ciphertext store, Fly.io); libsodium key
 hierarchy: mnemonic → account Ed25519/X25519 → per-space keys sealed to member

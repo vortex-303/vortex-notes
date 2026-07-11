@@ -1,7 +1,20 @@
 # Vortex Notes — Status
 
-**Phase 0 COMPLETE incl. signature tools (2026-07-10).** See PLAN.md for phases; full
-product strategy artifact: https://claude.ai/code/artifact/0b58a836-a787-450f-ac70-84ff821074f4
+**Phase 0 COMPLETE; Phase 1 slice 1a (identity) DONE (2026-07-11).** See PLAN.md for
+phases; strategy artifact: https://claude.ai/code/artifact/0b58a836-a787-450f-ac70-84ff821074f4
+
+## Phase 1a: Identity layer (verified live)
+- 12-word BIP39 phrase = the account. `identity init` shows it once; same phrase
+  on another machine (`identity login`, hidden input) derives the same account
+  fingerprint with fresh device keys certified by the account signing key.
+- Files: src/crypto.ts (sealed box, XChaCha20-Poly1305+AAD, HKDF, ed25519/x25519),
+  src/identity.ts (phrase→keys, device certs, ~/.vortex-notes storage, 0600),
+  src/spaces.ts (space keys sealed to device+account, grantSpace = the Phase 2
+  agent mechanism, encryptDoc/decryptDoc bound to doc id).
+- Deps: @scure/bip39 + @noble/{curves,hashes,ciphers} v2 — subpath imports NEED
+  `.js` suffix; hkdf salt/info must be Uint8Array not string.
+- VORTEX_NOTES_HOME env overrides ~/.vortex-notes (used by tests).
+- 21/21 tests. Next: 1b relay (ciphertext store on Fly), see PLAN.md.
 
 ## What works (verified, not just typechecked)
 - `vortex-notes init/index/search/mcp` CLI
