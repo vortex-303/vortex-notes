@@ -28,7 +28,9 @@ test("web server serves shell, notes, search, raw; blocks escapes", async () => 
     const shell = await fetch(base);
     assert.equal(shell.status, 200);
     assert.match(shell.headers.get("content-security-policy") ?? "", /script-src 'nonce-/);
-    assert.match(await shell.text(), /Vortex<\/span> Notes/);
+    const shellHtml = await shell.text();
+    assert.match(shellHtml, /class="vx">Vortex<\/span>/);
+    assert.match(shellHtml, /class="mark"/); // animated vortex icon present
 
     const note = (await (await fetch(`${base}/api/note?path=guide.md`)).json()) as {
       title: string;
