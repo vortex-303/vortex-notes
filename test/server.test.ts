@@ -53,6 +53,48 @@ test("web server serves shell, notes, search, raw; blocks escapes", async () => 
 
     const missing = await fetch(`${base}/api/note?path=nope.md`);
     assert.equal(missing.status, 404);
+
+    // --- write path: create → edit → daily → delete ---
+    const jsonReq = (method: string, url: string, body: unknown) =>
+      fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+
+    const created = await jsonReq("POST", `${base}/api/note`, {
+      title: "Web Draft",
+      folder: "inbox",
+      content: "First line.",
+    });
+    assert.equal(created.status, 200);
+    const { path: newPath } = (await created.json()) as { path: string };
+    assert.equal(newPath, "inbox/web-draft.md");
+
+    const dup = await jsonReq("POST", `${base}/api/note`, { title: "Web Draft", folder: "inbox" });
+    assert.equal(dup.status, 409);
+
+    const updated = await jsonReq("PUT", `${base}/api/note?path=${encodeURIComponent(newPath)}`, {
+      body: "Edited in the browser.",
+    });
+    assert.equal(updated.status, 200);
+    const after = (await (await fetch(`${base}/api/note?path=${encodeURIComponent(newPath)}`)).json()) as {
+      body: string;
+    };
+    assert.match(after.body, /Edited in the browser/);
+    assert.equal(vault.readNote(newPath).frontmatter.title, "Web Draft"); // frontmatter preserved
+
+    const daily = await jsonReq("POST", `${base}/api/daily`, { content: "quick thought" });
+    assert.equal(daily.status, 200);
+    const { path: dailyPath } = (await daily.json()) as { path: string };
+    assert.match(dailyPath, /^daily\/\d{4}-\d{2}-\d{2}\.md$/);
+    assert.match(vault.readNote(dailyPath).body, /quick thought/);
+
+    // mutations without JSON content-type are rejected (CSRF guard)
+    const noCt = await fetch(`${base}/api/note`, { method: "POST", body: JSON.stringify({ title: "x" }) });
+    assert.equal(noCt.status, 400);
+
+    const del = await jsonReq("DELETE", `${base}/api/note?path=${encodeURIComponent(newPath)}`, {});
+    assert.equal(del.status, 200);
+    assert.equal(fs.existsSync(path.join(dir, newPath)), false);
+    const gone = await fetch(`${base}/api/note?path=${encodeURIComponent(newPath)}`);
+    assert.equal(gone.status, 404);
   } finally {
     await close();
   }

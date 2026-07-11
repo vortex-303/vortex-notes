@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { marked } from "marked";
-import { Vault } from "./vault.js";
+import { Vault, slugify } from "./vault.js";
 import { Indexer, startVaultWatcher } from "./indexer.js";
 import { search } from "./search.js";
 import { htmlShell } from "./webui.js";
@@ -36,10 +36,42 @@ export async function startWebServer(
   );
 
   const sseClients = new Set<http.ServerResponse>();
-  const watcher = startVaultWatcher(vault, indexer, (rel) => {
+  const broadcast = (rel: string) => {
     const msg = `data: ${JSON.stringify({ type: "change", path: rel })}\n\n`;
     for (const res of sseClients) res.write(msg);
-  });
+  };
+  const watcher = startVaultWatcher(vault, indexer, broadcast);
+  const afterWrite = (rel: string) => {
+    indexer.indexNote(rel);
+    void indexer.embedPending();
+    broadcast(rel);
+  };
+
+  /**
+   * Mutations require Content-Type: application/json — cross-origin pages
+   * can't send that to localhost without a CORS preflight, which we never
+   * answer, so random websites can't write to the vault.
+   */
+  const readJson = (req: http.IncomingMessage): Promise<Record<string, unknown>> =>
+    new Promise((resolve, reject) => {
+      if (!/^application\/json/.test(req.headers["content-type"] ?? "")) {
+        reject(new Error("Content-Type must be application/json"));
+        return;
+      }
+      let data = "";
+      req.on("data", (c) => {
+        data += c;
+        if (data.length > 2_000_000) req.destroy();
+      });
+      req.on("end", () => {
+        try {
+          resolve(JSON.parse(data || "{}"));
+        } catch {
+          reject(new Error("Invalid JSON body"));
+        }
+      });
+      req.on("error", reject);
+    });
 
   /** Resolve [[wikilink]] targets to note paths via title or basename. */
   const resolver = (): Map<string, string> => {
@@ -99,6 +131,50 @@ export async function startWebServer(
           .prepare("SELECT path, title, mtime FROM notes ORDER BY path")
           .all();
         return json(rows);
+      }
+      if (url.pathname === "/api/note" && req.method === "POST") {
+        const b = await readJson(req);
+        const title = String(b.title ?? "").trim();
+        if (!title) return send(400, "application/json", JSON.stringify({ error: "title required" }));
+        const folder = String(b.folder ?? "").trim().replace(/^\/+|\/+$/g, "");
+        const rel = path.posix.join(folder, slugify(title) + ".md");
+        if (fs.existsSync(vault.abs(rel))) {
+          return send(409, "application/json", JSON.stringify({ error: `Already exists: ${rel}` }));
+        }
+        vault.writeNote(rel, title, String(b.content ?? ""), Array.isArray(b.tags) ? b.tags.map(String) : []);
+        afterWrite(rel);
+        return json({ path: rel });
+      }
+      if (url.pathname === "/api/note" && req.method === "PUT") {
+        const rel = url.searchParams.get("path") ?? "";
+        if (!vault.isNotePath(rel) || !fs.existsSync(vault.abs(rel))) {
+          return send(404, "application/json", JSON.stringify({ error: `Not found: ${rel}` }));
+        }
+        const b = await readJson(req);
+        vault.updateNote(rel, String(b.body ?? ""));
+        afterWrite(rel);
+        return json({ path: rel, ...renderNote(rel) });
+      }
+      if (url.pathname === "/api/note" && req.method === "DELETE") {
+        const rel = url.searchParams.get("path") ?? "";
+        if (!vault.isNotePath(rel) || !fs.existsSync(vault.abs(rel))) {
+          return send(404, "application/json", JSON.stringify({ error: `Not found: ${rel}` }));
+        }
+        if (!/^application\/json/.test(req.headers["content-type"] ?? "")) {
+          return send(400, "application/json", JSON.stringify({ error: "Content-Type must be application/json" }));
+        }
+        fs.rmSync(vault.abs(rel));
+        indexer.removeNote(rel);
+        broadcast(rel);
+        return json({ ok: true });
+      }
+      if (url.pathname === "/api/daily" && req.method === "POST") {
+        const b = await readJson(req);
+        const content = String(b.content ?? "").trim();
+        if (!content) return send(400, "application/json", JSON.stringify({ error: "content required" }));
+        const rel = vault.appendDaily(content);
+        afterWrite(rel);
+        return json({ path: rel });
       }
       if (url.pathname === "/api/note") {
         const rel = url.searchParams.get("path") ?? "";

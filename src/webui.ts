@@ -1,5 +1,5 @@
 /**
- * The local web viewer: a single self-contained page. Client JS avoids
+ * The local web app: a single self-contained page. Client JS avoids
  * template literals so this file's template literal stays unambiguous.
  */
 export function htmlShell(nonce: string, vaultRoot: string): string {
@@ -14,7 +14,7 @@ export function htmlShell(nonce: string, vaultRoot: string): string {
   :root {
     --ground: #F8FAF8; --surface: #FFFFFF; --ink: #1D2421; --ink-soft: #4A554F;
     --ink-faint: #75817A; --line: #DFE6E1; --accent: #14735C; --accent-soft: #E3F0EB;
-    --code-bg: #F0F4F1;
+    --danger: #A33B2E; --code-bg: #F0F4F1;
     --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
     --serif: "Charter", "Iowan Old Style", Georgia, serif;
     --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -22,7 +22,7 @@ export function htmlShell(nonce: string, vaultRoot: string): string {
   [data-theme="dark"] {
     --ground: #121715; --surface: #1A211E; --ink: #E6ECE8; --ink-soft: #ACB8B1;
     --ink-faint: #7D8A83; --line: #2C3531; --accent: #4CC2A0; --accent-soft: #1C2F29;
-    --code-bg: #202824;
+    --danger: #E08573; --code-bg: #202824;
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; }
@@ -34,16 +34,16 @@ export function htmlShell(nonce: string, vaultRoot: string): string {
     display: flex; flex-direction: column;
   }
   .brand {
-    display: flex; align-items: center; justify-content: space-between;
+    display: flex; align-items: center; gap: 0.5rem;
     padding: 1rem 1rem 0.75rem;
   }
-  .brand h1 { font: 700 0.95rem var(--sans); margin: 0; letter-spacing: -0.01em; }
+  .brand h1 { font: 700 0.95rem var(--sans); margin: 0 auto 0 0; letter-spacing: -0.01em; }
   .brand h1 .vx { color: var(--accent); }
-  .brand button {
+  .iconbtn {
     background: none; border: 1px solid var(--line); border-radius: 6px; color: var(--ink-soft);
-    width: 28px; height: 28px; cursor: pointer; font-size: 0.9rem; line-height: 1;
+    min-width: 28px; height: 28px; cursor: pointer; font-size: 0.9rem; line-height: 1; padding: 0 0.4rem;
   }
-  .brand button:hover { border-color: var(--accent); color: var(--accent); }
+  .iconbtn:hover { border-color: var(--accent); color: var(--accent); }
   .searchbox { padding: 0 1rem 0.75rem; }
   .searchbox input {
     width: 100%; padding: 0.5rem 0.7rem; border: 1px solid var(--line); border-radius: 7px;
@@ -65,20 +65,31 @@ export function htmlShell(nonce: string, vaultRoot: string): string {
   .hit .snip { font-size: 0.74rem; color: var(--ink-faint); white-space: normal; margin-top: 2px; }
   .hit { margin-bottom: 0.35rem; }
   .empty-msg { color: var(--ink-faint); font-size: 0.82rem; padding: 0.5rem; }
+  .dailybox { padding: 0.75rem 1rem; border-top: 1px solid var(--line); }
+  .dailybox input {
+    width: 100%; padding: 0.45rem 0.65rem; border: 1px solid var(--line); border-radius: 7px;
+    background: var(--ground); color: var(--ink); font: 0.8rem var(--sans); outline: none;
+  }
+  .dailybox input:focus { border-color: var(--accent); }
+  .dailybox label { display: block; font: 600 0.6rem var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 0.35rem; }
 
   main { flex: 1; height: 100vh; overflow-y: auto; }
   .page { max-width: 46rem; margin: 0 auto; padding: 3rem 2.2rem 6rem; }
   .placeholder { color: var(--ink-faint); font: 1rem var(--serif); font-style: italic; margin-top: 30vh; text-align: center; }
 
   .notehead { border-bottom: 1px solid var(--line); padding-bottom: 1rem; margin-bottom: 1.6rem; }
-  .notehead .meta { font: 0.7rem var(--mono); color: var(--ink-faint); letter-spacing: 0.05em; display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
+  .notehead .meta { font: 0.7rem var(--mono); color: var(--ink-faint); letter-spacing: 0.05em; display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
+  .notehead .meta .path { margin-right: auto; }
   .notehead .tag { background: var(--accent-soft); color: var(--accent); padding: 0.1rem 0.5rem; border-radius: 999px; }
   .notehead h1 { font: 700 2rem/1.15 var(--serif); letter-spacing: -0.015em; margin: 0.4rem 0 0.6rem; }
-  .notehead button {
-    margin-left: auto; background: none; border: 1px solid var(--line); border-radius: 6px;
+  .mbtn {
+    background: none; border: 1px solid var(--line); border-radius: 6px;
     color: var(--ink-soft); font: 0.68rem var(--mono); padding: 0.2rem 0.55rem; cursor: pointer;
   }
-  .notehead button:hover { border-color: var(--accent); color: var(--accent); }
+  .mbtn:hover { border-color: var(--accent); color: var(--accent); }
+  .mbtn.danger:hover { border-color: var(--danger); color: var(--danger); }
+  .mbtn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  [data-theme="dark"] .mbtn.primary { color: #10211C; }
 
   article { font: 1.02rem/1.68 var(--serif); }
   article h1, article h2, article h3, article h4 { font-family: var(--serif); letter-spacing: -0.01em; line-height: 1.25; margin: 1.8em 0 0.5em; }
@@ -102,6 +113,15 @@ export function htmlShell(nonce: string, vaultRoot: string): string {
   article input[type=checkbox] { accent-color: var(--accent); }
   pre.rawview { font: 0.82rem/1.6 var(--mono); white-space: pre-wrap; word-break: break-word; }
 
+  .editor {
+    width: 100%; min-height: 60vh; resize: vertical;
+    font: 0.9rem/1.65 var(--mono); color: var(--ink);
+    background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+    padding: 1.1rem 1.3rem; outline: none;
+  }
+  .editor:focus { border-color: var(--accent); }
+  .editnote { font: 0.72rem var(--mono); color: var(--ink-faint); margin-top: 0.5rem; }
+
   @media (max-width: 720px) {
     body { flex-direction: column; }
     aside { width: 100%; height: auto; max-height: 45vh; border-right: none; border-bottom: 1px solid var(--line); }
@@ -114,12 +134,17 @@ export function htmlShell(nonce: string, vaultRoot: string): string {
 <aside>
   <div class="brand">
     <h1><span class="vx">Vortex</span> Notes</h1>
-    <button id="themeBtn" title="Toggle theme">◐</button>
+    <button class="iconbtn" id="newBtn" title="New note">＋</button>
+    <button class="iconbtn" id="themeBtn" title="Toggle theme">◐</button>
   </div>
   <div class="searchbox"><input id="search" type="search" placeholder="Search notes…" autocomplete="off"></div>
   <nav id="nav"></nav>
+  <div class="dailybox">
+    <label for="daily">Daily note — press Enter</label>
+    <input id="daily" placeholder="Quick thought…" autocomplete="off">
+  </div>
 </aside>
-<main><div class="page" id="page"><div class="placeholder">Select a note — or search.</div></div></main>
+<main><div class="page" id="page"><div class="placeholder">Select a note, search, or create one with ＋</div></div></main>
 
 <script nonce="${nonce}">
 (function () {
@@ -127,8 +152,9 @@ export function htmlShell(nonce: string, vaultRoot: string): string {
   var notes = [];
   var current = null;
   var rawMode = false;
+  var editing = false;
+  var pendingChange = null;
 
-  // Theme
   var root = document.documentElement;
   var saved = localStorage.getItem("vn-theme");
   var prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
@@ -142,7 +168,18 @@ export function htmlShell(nonce: string, vaultRoot: string): string {
   function esc(s) {
     return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
-
+  function api(method, url, body) {
+    return fetch(url, {
+      method: method,
+      headers: { "Content-Type": "application/json" },
+      body: body === undefined ? "{}" : JSON.stringify(body)
+    }).then(function (r) {
+      return r.json().then(function (d) {
+        if (!r.ok) throw new Error(d.error || ("HTTP " + r.status));
+        return d;
+      });
+    });
+  }
   function noteLink(path, label, cls) {
     return '<a class="' + (cls || "") + '" data-path="' + esc(path) + '" href="#/note/' + encodeURIComponent(path) + '">' + esc(label) + "</a>";
   }
@@ -160,7 +197,7 @@ export function htmlShell(nonce: string, vaultRoot: string): string {
         html += noteLink(n.path, n.title, current === n.path ? "active" : "");
       });
     });
-    document.getElementById("nav").innerHTML = html || '<div class="empty-msg">No notes yet.</div>';
+    document.getElementById("nav").innerHTML = html || '<div class="empty-msg">No notes yet — create one with ＋</div>';
   }
 
   function renderSearch(results, q) {
@@ -173,25 +210,72 @@ export function htmlShell(nonce: string, vaultRoot: string): string {
     document.getElementById("nav").innerHTML = html;
   }
 
-  function openNote(path) {
+  function metaBar(n, buttons) {
+    var meta = '<div class="meta"><span class="path">' + esc(n.path) + "</span>";
+    (n.tags || []).forEach(function (t) { meta += '<span class="tag">' + esc(t) + "</span>"; });
+    if (n.updated) meta += "<span>" + esc(String(n.updated).slice(0, 10)) + "</span>";
+    meta += buttons + "</div>";
+    return meta;
+  }
+
+  function showNote(n) {
+    editing = false;
+    var buttons =
+      '<button class="mbtn" id="editBtn">edit</button>' +
+      '<button class="mbtn" id="rawBtn">' + (rawMode ? "rendered" : "source") + "</button>" +
+      '<button class="mbtn danger" id="delBtn">delete</button>';
+    var content = rawMode
+      ? '<pre class="rawview">' + esc(n.body) + "</pre>"
+      : "<article>" + n.html + "</article>";
+    document.getElementById("page").innerHTML =
+      '<div class="notehead">' + metaBar(n, buttons) + "<h1>" + esc(n.title) + "</h1></div>" + content;
+    document.title = n.title + " — Vortex Notes";
+    document.getElementById("rawBtn").addEventListener("click", function () {
+      rawMode = !rawMode; showNote(n);
+    });
+    document.getElementById("editBtn").addEventListener("click", function () { showEditor(n); });
+    document.getElementById("delBtn").addEventListener("click", function () {
+      if (!confirm("Delete " + n.path + "? The file is removed from disk.")) return;
+      api("DELETE", "/api/note?path=" + encodeURIComponent(n.path)).then(function () {
+        current = null;
+        document.getElementById("page").innerHTML = '<div class="placeholder">Deleted.</div>';
+        location.hash = "";
+        loadList();
+      }).catch(alertErr);
+    });
+    renderList();
+  }
+
+  function showEditor(n) {
+    editing = true;
+    var buttons =
+      '<button class="mbtn primary" id="saveBtn">save</button>' +
+      '<button class="mbtn" id="cancelBtn">cancel</button>';
+    document.getElementById("page").innerHTML =
+      '<div class="notehead">' + metaBar(n, buttons) + "<h1>" + esc(n.title) + "</h1></div>" +
+      '<textarea class="editor" id="editor" spellcheck="false"></textarea>' +
+      '<div class="editnote">markdown body — frontmatter is preserved automatically · \\u2318S / Ctrl+S to save</div>';
+    var ta = document.getElementById("editor");
+    ta.value = n.body;
+    ta.focus();
+    function save() {
+      api("PUT", "/api/note?path=" + encodeURIComponent(n.path), { body: ta.value })
+        .then(function (fresh) { pendingChange = null; showNote(fresh); })
+        .catch(alertErr);
+    }
+    document.getElementById("saveBtn").addEventListener("click", save);
+    document.getElementById("cancelBtn").addEventListener("click", function () { openNote(n.path); });
+    ta.addEventListener("keydown", function (e) {
+      if ((e.metaKey || e.ctrlKey) && e.key === "s") { e.preventDefault(); save(); }
+    });
+  }
+
+  function openNote(path, thenEdit) {
     fetch("/api/note?path=" + encodeURIComponent(path))
       .then(function (r) { if (!r.ok) throw new Error("not found"); return r.json(); })
       .then(function (n) {
         current = path;
-        var meta = '<div class="meta"><span>' + esc(n.path) + "</span>";
-        (n.tags || []).forEach(function (t) { meta += '<span class="tag">' + esc(t) + "</span>"; });
-        if (n.updated) meta += "<span>" + esc(String(n.updated).slice(0, 10)) + "</span>";
-        meta += '<button id="rawBtn">' + (rawMode ? "rendered" : "source") + "</button></div>";
-        var content = rawMode
-          ? '<pre class="rawview">' + esc(n.body) + "</pre>"
-          : "<article>" + n.html + "</article>";
-        document.getElementById("page").innerHTML =
-          '<div class="notehead">' + meta + "<h1>" + esc(n.title) + "</h1></div>" + content;
-        document.getElementById("rawBtn").addEventListener("click", function () {
-          rawMode = !rawMode;
-          openNote(path);
-        });
-        document.title = n.title + " — Vortex Notes";
+        if (thenEdit) showEditor(n); else showNote(n);
         renderList();
         document.querySelector("main").scrollTop = 0;
       })
@@ -200,11 +284,36 @@ export function htmlShell(nonce: string, vaultRoot: string): string {
       });
   }
 
+  function alertErr(e) { alert(e.message || e); }
+
+  document.getElementById("newBtn").addEventListener("click", function () {
+    var title = prompt("Note title (prefix with folder/ to file it, e.g. projects/My Idea):");
+    if (!title) return;
+    var folder = "";
+    var slash = title.lastIndexOf("/");
+    if (slash > 0) { folder = title.slice(0, slash); title = title.slice(slash + 1); }
+    api("POST", "/api/note", { title: title.trim(), folder: folder, content: "" })
+      .then(function (d) {
+        loadList(function () { location.hash = "#/note/" + encodeURIComponent(d.path); openNote(d.path, true); });
+      })
+      .catch(alertErr);
+  });
+
+  document.getElementById("daily").addEventListener("keydown", function (e) {
+    if (e.key !== "Enter") return;
+    var val = e.target.value.trim();
+    if (!val) return;
+    api("POST", "/api/daily", { content: val }).then(function (d) {
+      e.target.value = "";
+      loadList(function () { if (current === d.path) openNote(d.path); });
+    }).catch(alertErr);
+  });
+
   function route() {
     var m = location.hash.match(/^#\\/note\\/(.+)$/);
     if (m) openNote(decodeURIComponent(m[1]));
   }
-  window.addEventListener("hashchange", route);
+  window.addEventListener("hashchange", function () { if (!editing) route(); });
 
   function loadList(then) {
     fetch("/api/notes").then(function (r) { return r.json(); }).then(function (data) {
@@ -231,8 +340,9 @@ export function htmlShell(nonce: string, vaultRoot: string): string {
     es.onmessage = function (ev) {
       var msg = JSON.parse(ev.data);
       if (msg.type !== "change") return;
+      if (editing && msg.path === current) { pendingChange = msg.path; return; } // never clobber the editor
       loadList(function () {
-        if (current === msg.path && !rawMode) openNote(current);
+        if (current === msg.path && !rawMode && !editing) openNote(current);
       });
     };
   } catch (e) { /* SSE unsupported — manual refresh still works */ }
