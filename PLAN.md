@@ -36,11 +36,15 @@ Slices, each shippable:
   + grantable to any principal — the Phase 2 agent-grant mechanism already works);
   XChaCha20-Poly1305 payloads with AAD doc binding; CLI `identity init/login/show`,
   `space create/list` with hidden phrase input. noble/scure stack (audited, MIT).
-- [ ] **1b. Relay**: dumb ciphertext store (Node, Fly.io) — per-space encrypted
-  snapshot + update log, WebSocket fanout, signed requests, device registry
-  (evolve persona-cloud relay shape + secsync protocol design)
-- [ ] **1c. Vault↔space sync**: encrypt notes client-side per space, push/pull via
-  relay, md files stay the local projection; second device gets the vault
+- [x] **1b. Relay** (2026-07-11): HTTP ciphertext store (better-sqlite3, no plaintext
+  fields), ed25519 signed requests, device registry via account-signed certs,
+  per-space append-only update log with seq cursor. Self-host: `vortex-notes relay`.
+  Still TODO: WebSocket/SSE push (poll-only now), Fly.io deploy, quotas.
+- [x] **1c. Vault↔space sync** (2026-07-11): `sync link/join/status` + `sync`;
+  whole-file LWW payloads encrypted per space, AAD-bound to path; phrase needed
+  once on join (unseal from account seal, re-seal to device); conflicts preserved
+  as .conflict files. TODO polish: auto-sync in serve/mcp daemons, deletions,
+  renames, skip-Welcome-on-join.
 - [ ] **1d. Web app unlock**: hosted PWA — phrase unlock client-side (keys in
   IndexedDB), read+edit synced spaces; the serve UI becomes this app
 - [ ] **1e. Editor**: TipTap (MIT core) + CodeMirror source toggle; per-note Yjs
