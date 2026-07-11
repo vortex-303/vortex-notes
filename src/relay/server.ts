@@ -102,7 +102,10 @@ export async function startRelay(
     if ("error" in auth) return sendJson(res, 401, { error: auth.error });
     const { account, devicePub } = auth;
 
-    const spaceMatch = url.pathname.match(/^\/v1\/spaces\/([a-z0-9-]+)(?:\/docs\/([A-Za-z0-9._-]+))?$/);
+    const rawMatch = url.pathname.match(/^\/v1\/spaces\/([a-z0-9-]+)(?:\/docs\/([A-Za-z0-9._%-]+))?$/);
+    const spaceMatch = rawMatch
+      ? ([rawMatch[0], rawMatch[1], rawMatch[2] ? decodeURIComponent(rawMatch[2]) : undefined] as const)
+      : null;
 
     if (route === "GET /v1/spaces") {
       const rows = db.prepare("SELECT id, sealedKeys, createdAt FROM spaces WHERE account=?").all(account) as {

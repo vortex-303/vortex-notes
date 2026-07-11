@@ -25,6 +25,12 @@ Usage:
   vortex-notes space create <name>              Create an encrypted space
   vortex-notes space list                       List spaces on this machine
   vortex-notes relay [--port <n>] [--db <file>] Run a sync relay (self-host; stores ciphertext only)
+  vortex-notes sync link --relay <url> --space <name> [--vault <dir>]
+                                                Link this vault to a space (first machine)
+  vortex-notes sync join --relay <url> [--space <id>] [--vault <dir>]
+                                                Join your space here (asks for recovery phrase once)
+  vortex-notes sync [--vault <dir>]             Pull + push encrypted changes
+  vortex-notes sync status [--vault <dir>]      Show link + cursor
 
 Vault resolution: --vault flag > VORTEX_NOTES_VAULT env > cwd if it has .vortex > ~/VortexNotes
 Set VORTEX_NOTES_NO_SEMANTIC=1 to disable embeddings (keyword search only).`;
@@ -46,7 +52,7 @@ function parseArgs(argv: string[]): Args {
     const a = argv[i];
     if (a.startsWith("--")) {
       const key = a.slice(2);
-      if (key === "vault" || key === "port" || key === "name" || key === "db") args.flags.set(key, argv[++i]);
+      if (["vault", "port", "name", "db", "relay", "space"].includes(key)) args.flags.set(key, argv[++i]);
       else args.flags.set(key, true);
     } else {
       args.positional.push(a);
@@ -163,6 +169,34 @@ async function main(): Promise<void> {
         }
       } else {
         fail("Usage: vortex-notes space <create|list>");
+      }
+      break;
+    }
+    case "sync": {
+      requireVault(vault);
+      const { linkVault, joinVault, syncVault, loadSyncState } = await import("./sync.js");
+      const sub = args.positional[0];
+      if (sub === "link") {
+        const relay = args.flags.get("relay") as string;
+        const spaceName = args.flags.get("space") as string;
+        if (!relay || !spaceName) fail("Usage: vortex-notes sync link --relay <url> --space <name>");
+        const state = await linkVault(vault, relay, spaceName);
+        console.log(`Linked vault to space ${state.spaceId} on ${relay}. Run 'vortex-notes sync' to push.`);
+      } else if (sub === "join") {
+        const relay = args.flags.get("relay") as string;
+        if (!relay) fail("Usage: vortex-notes sync join --relay <url> [--space <id>]");
+        const phrase = await promptHidden("Enter your 12-word recovery phrase (needed once to unseal the space key): ");
+        const state = await joinVault(vault, relay, phrase, args.flags.get("space") as string | undefined);
+        console.log(`Joined space ${state.spaceId}. Run 'vortex-notes sync' to pull your notes.`);
+      } else if (sub === "status") {
+        const state = loadSyncState(vault);
+        if (!state) console.log("Not linked. Use 'sync link' or 'sync join'.");
+        else console.log(`Linked to ${state.spaceId} via ${state.relay} — cursor ${state.cursor}, ${Object.keys(state.files).length} files tracked.`);
+      } else if (sub === undefined || sub === "now") {
+        const r = await syncVault(vault);
+        console.log(`Synced: pulled ${r.pulled}, pushed ${r.pushed}${r.conflicts.length ? `, conflicts: ${r.conflicts.join(", ")}` : ""}.`);
+      } else {
+        fail("Usage: vortex-notes sync [link|join|status]");
       }
       break;
     }
