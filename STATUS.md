@@ -14,7 +14,20 @@ phases; strategy artifact: https://claude.ai/code/artifact/0b58a836-a787-450f-ac
 - Deps: @scure/bip39 + @noble/{curves,hashes,ciphers} v2 — subpath imports NEED
   `.js` suffix; hkdf salt/info must be Uint8Array not string.
 - VORTEX_NOTES_HOME env overrides ~/.vortex-notes (used by tests).
-- 21/21 tests. Next: 1b relay (ciphertext store on Fly), see PLAN.md.
+- 21/21 tests at 1a; 25/25 after 1b+1c.
+
+## Phase 1b+1c: Relay + sync (verified live via CLI)
+- Relay: src/relay/server.ts — HTTP ciphertext store, ed25519 signed requests
+  (METHOD\npath?query\nts\nsha256(body)), device registry via account-signed
+  certs, per-space update log w/ seq. `vortex-notes relay --port --db`.
+- Sync: src/sync.ts — `sync link` / `sync join` (phrase once) / `sync` /
+  `sync status`. Whole-file LWW, AAD=path, conflicts → .conflict-<ts>.md.
+  State in .vortex/sync.json (cursor + per-file hashes).
+- Live-verified: two homes, two vaults, self-hosted relay; `grep` of relay.db
+  finds no plaintext. Doc ids with slashes must be URL-encoded (relay decodes).
+- Known polish: Welcome.md conflicts on join (both vaults auto-create it);
+  no deletion/rename sync; no push notify (poll only); no auto-sync daemon.
+- Next: 1d web unlock, 1e editor (see PLAN.md), relay deploy to Fly.
 
 ## What works (verified, not just typechecked)
 - `vortex-notes init/index/search/mcp` CLI
