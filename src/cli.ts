@@ -24,6 +24,7 @@ Usage:
   vortex-notes identity show                    Fingerprint + device info
   vortex-notes space create <name>              Create an encrypted space
   vortex-notes space list                       List spaces on this machine
+  vortex-notes relay [--port <n>] [--db <file>] Run a sync relay (self-host; stores ciphertext only)
 
 Vault resolution: --vault flag > VORTEX_NOTES_VAULT env > cwd if it has .vortex > ~/VortexNotes
 Set VORTEX_NOTES_NO_SEMANTIC=1 to disable embeddings (keyword search only).`;
@@ -45,7 +46,7 @@ function parseArgs(argv: string[]): Args {
     const a = argv[i];
     if (a.startsWith("--")) {
       const key = a.slice(2);
-      if (key === "vault" || key === "port" || key === "name") args.flags.set(key, argv[++i]);
+      if (key === "vault" || key === "port" || key === "name" || key === "db") args.flags.set(key, argv[++i]);
       else args.flags.set(key, true);
     } else {
       args.positional.push(a);
@@ -163,6 +164,15 @@ async function main(): Promise<void> {
       } else {
         fail("Usage: vortex-notes space <create|list>");
       }
+      break;
+    }
+    case "relay": {
+      const { startRelay } = await import("./relay/server.js");
+      const { port } = await startRelay({
+        port: Number(args.flags.get("port") ?? 7300),
+        dbPath: (args.flags.get("db") as string) ?? undefined,
+      });
+      console.log(`Vortex relay on :${port} — ciphertext store only, no keys, no plaintext.`);
       break;
     }
     case undefined:
