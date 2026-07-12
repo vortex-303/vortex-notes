@@ -1,15 +1,19 @@
 /**
- * Vault ↔ relay sync (v0: whole-note last-writer-wins).
+ * Vault ↔ relay sync.
  *
  * Each note file is a doc (docId = vault-relative path). An update is the
  * full file content, encrypted with the space key, AAD-bound to the path.
- * Pull runs before push; a note edited both locally and remotely resolves
- * by newest mtime, and the loser is preserved as <name>.conflict-<ts>.md —
- * sync never silently discards words. Deletions don't sync in v0.
- * CRDT-per-note replaces this in slice 1e without changing the relay.
+ * Pull runs before push. Concurrent edits are resolved with a git-style
+ * 3-way merge (node-diff3) against the last-synced base copy kept in
+ * .vortex/sync-base/ — edits to different parts of a note merge cleanly;
+ * only genuinely overlapping edits fall back to newest-mtime-wins with the
+ * loser preserved as <name>.conflict-<ts>.md. Sync never silently discards
+ * words. Deletions don't sync yet. (Per-character CRDT arrives with the
+ * real-time collab channel — at a 30s poll cadence diff3 is equivalent.)
  */
 import fs from "node:fs";
 import path from "node:path";
+import { diff3Merge } from "node-diff3";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { Vault } from "./vault.js";
 import { RelayClient } from "./relay/client.js";
@@ -160,18 +164,33 @@ export async function syncVault(vault: Vault): Promise<SyncResult> {
 
     if (localHash === remoteHash) {
       state.files[rel] = remoteHash;
+      writeBase(vault, rel, payload.content);
       continue;
     }
     const locallyModified = localExists && state.files[rel] !== undefined && localHash !== state.files[rel];
     const locallyNew = localExists && state.files[rel] === undefined;
     if ((locallyModified || locallyNew) && localContent !== null) {
+      // Both sides changed. Try a 3-way merge against the last-synced base.
+      const base = readBase(vault, rel);
+      if (base !== null) {
+        const merged = tryDiff3(base, localContent, payload.content);
+        if (merged !== null) {
+          fs.writeFileSync(abs, merged);
+          // Leave state.files at the OLD hash: the push phase below sees the
+          // merged file as changed and pushes it, making the merge durable.
+          writeBase(vault, rel, payload.content);
+          result.pulled++;
+          continue;
+        }
+      }
+      // Overlapping edits (or no base): newest wins, loser becomes a conflict file.
       const localMtime = fs.statSync(abs).mtimeMs;
       if (localMtime >= payload.mtimeMs) {
-        // Local wins; remote version preserved as a conflict file. Push happens below.
         const conflictRel = rel.replace(/\.md$/, `.conflict-${Date.now()}.md`);
         fs.writeFileSync(vault.abs(conflictRel), payload.content);
         result.conflicts.push(conflictRel);
-        continue;
+        writeBase(vault, rel, payload.content);
+        continue; // push phase publishes the local winner
       }
       const conflictRel = rel.replace(/\.md$/, `.conflict-${Date.now()}.md`);
       fs.writeFileSync(vault.abs(conflictRel), localContent);
@@ -180,6 +199,7 @@ export async function syncVault(vault: Vault): Promise<SyncResult> {
     fs.mkdirSync(path.dirname(abs), { recursive: true });
     fs.writeFileSync(abs, payload.content);
     state.files[rel] = remoteHash;
+    writeBase(vault, rel, payload.content);
     result.pulled++;
   }
   // Cursor may also advance past our own echoes even when latest-per-doc skipped them.
@@ -195,6 +215,7 @@ export async function syncVault(vault: Vault): Promise<SyncResult> {
     const seq = await client.pushUpdate(state.spaceId, rel, blob);
     state.cursor = Math.max(state.cursor, seq);
     state.files[rel] = h;
+    writeBase(vault, rel, content);
     result.pushed++;
   }
 
@@ -204,4 +225,32 @@ export async function syncVault(vault: Vault): Promise<SyncResult> {
 
 function hashOf(content: string): string {
   return toHex(sha256(utf8(content)));
+}
+
+// ---- 3-way merge support ----
+
+const baseDir = (vault: Vault) => path.join(vault.metaDir, "sync-base");
+const basePath = (vault: Vault, rel: string) => path.join(baseDir(vault), encodeURIComponent(rel));
+
+function readBase(vault: Vault, rel: string): string | null {
+  const p = basePath(vault, rel);
+  return fs.existsSync(p) ? fs.readFileSync(p, "utf8") : null;
+}
+
+function writeBase(vault: Vault, rel: string, content: string): void {
+  fs.mkdirSync(baseDir(vault), { recursive: true });
+  fs.writeFileSync(basePath(vault, rel), content);
+}
+
+/** Line-based diff3. Returns merged text, or null when hunks genuinely overlap. */
+export function tryDiff3(base: string, local: string, remote: string): string | null {
+  const regions = diff3Merge(local.split("\n"), base.split("\n"), remote.split("\n"), {
+    excludeFalseConflicts: true,
+  });
+  const out: string[] = [];
+  for (const region of regions) {
+    if ("ok" in region && region.ok) out.push(...region.ok);
+    else return null; // real conflict — caller falls back to LWW + conflict file
+  }
+  return out.join("\n");
 }

@@ -133,6 +133,55 @@ test("browser edit loop: an ephemeral browser device pushes; daemon sync writes 
   }
 });
 
+test("sync: concurrent edits to different parts of a note merge cleanly (diff3)", async () => {
+  const relay = await startRelay({ port: 0 });
+  const base = `http://127.0.0.1:${relay.port}`;
+  const mac = newHome();
+  const laptop = newHome();
+  try {
+    const v1 = freshVault();
+    const v2 = freshVault();
+    const original = "# Plan\n\nintro line\n\n## Tasks\n- task one\n\n## Notes\n- note one";
+
+    const phrase = await as(mac, async () => {
+      const { phrase } = initIdentity("mac");
+      fs.writeFileSync(v1.abs("plan.md"), original);
+      await linkVault(v1, base, "personal");
+      await syncVault(v1);
+      return phrase;
+    });
+    await as(laptop, async () => {
+      loginIdentity(phrase, "laptop");
+      await joinVault(v2, base, phrase);
+      await syncVault(v2);
+    });
+
+    // mac edits the Tasks section; laptop edits the Notes section — no overlap
+    await as(mac, async () => {
+      fs.writeFileSync(v1.abs("plan.md"), original.replace("- task one", "- task one\n- task two (mac)"));
+      await syncVault(v1);
+    });
+    await as(laptop, async () => {
+      fs.writeFileSync(v2.abs("plan.md"), original.replace("- note one", "- note one\n- note two (laptop)"));
+      const r = await syncVault(v2);
+      assert.equal(r.conflicts.length, 0, "non-overlapping edits must not conflict");
+      const merged = fs.readFileSync(v2.abs("plan.md"), "utf8");
+      assert.match(merged, /task two \(mac\)/);
+      assert.match(merged, /note two \(laptop\)/);
+    });
+    // mac pulls the merged result
+    await as(mac, async () => {
+      const r = await syncVault(v1);
+      assert.equal(r.conflicts.length, 0);
+      const merged = fs.readFileSync(v1.abs("plan.md"), "utf8");
+      assert.match(merged, /task two \(mac\)/);
+      assert.match(merged, /note two \(laptop\)/);
+    });
+  } finally {
+    await relay.close();
+  }
+});
+
 test("sync: concurrent edits produce a conflict file, newest wins in place", async () => {
   const relay = await startRelay({ port: 0 });
   const base = `http://127.0.0.1:${relay.port}`;
