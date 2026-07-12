@@ -45,8 +45,11 @@ Slices, each shippable:
   once on join (unseal from account seal, re-seal to device); conflicts preserved
   as .conflict files. TODO polish: auto-sync in serve/mcp daemons, deletions,
   renames, skip-Welcome-on-join.
-- [ ] **1d. Web app unlock**: hosted PWA — phrase unlock client-side (keys in
-  IndexedDB), read+edit synced spaces; the serve UI becomes this app
+- [x] **1d. Web app unlock** (2026-07-12): relay serves /app — phrase unlock fully
+  client-side (esbuild bundle of scure/noble + marked, 113KB), browser enrolls as a
+  certified device (keys in localStorage), unseals space key, decrypts notes in-tab.
+  Read-only v0; TODO: edit+push from browser, service worker/PWA manifest, IndexedDB
+  instead of localStorage, space picker (uses first space).
 - [ ] **1e. Editor**: TipTap (MIT core) + CodeMirror source toggle; per-note Yjs
   docs stored encrypted (decision point: plain-blob LWW first, CRDT after)
 Yjs canonical (Y.Doc per note), daemon materializes the md vault as projection;
