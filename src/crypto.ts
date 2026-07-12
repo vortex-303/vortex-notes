@@ -128,6 +128,22 @@ export function utf8(s: string): Uint8Array {
   return new TextEncoder().encode(s);
 }
 
+/** Base64 helpers that work in Node and browsers (no Buffer). */
+export function toB64(b: Uint8Array): string {
+  let bin = "";
+  for (let i = 0; i < b.length; i += 0x8000) {
+    bin += String.fromCharCode(...b.subarray(i, i + 0x8000));
+  }
+  return btoa(bin);
+}
+
+export function fromB64(s: string): Uint8Array {
+  const bin = atob(s);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
 function concat(...parts: Uint8Array[]): Uint8Array {
   const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
   let off = 0;

@@ -64,6 +64,53 @@ test("relay: two devices, one account — encrypted note round-trip, relay sees 
   }
 });
 
+test("browser-style unlock: ephemeral device from phrase alone (no filesystem) can read the space", async () => {
+  const relay = await startRelay({ port: 0 });
+  const base = `http://127.0.0.1:${relay.port}`;
+  try {
+    // seed: a normal machine pushes a note
+    freshHome();
+    const { phrase, identity: mac } = initIdentity("mac");
+    const space = createSpace(mac, "personal");
+    const key = openSpaceKey(mac, space);
+    const c1 = new RelayClient(base, mac);
+    await c1.register();
+    await c1.createSpace(space);
+    await c1.pushUpdate(space.id, "note-1", encryptDoc(key, "note-1", "browser should read this"));
+
+    // "browser": derive account from phrase, mint an uncertified-by-fs device in memory
+    const { accountFromPhrase: fromPhrase, certifyDevice } = await import("../src/account.js");
+    const { randomBoxKeypair: rBox, randomSignKeypair: rSign, toHex: hex } = await import("../src/crypto.js");
+    const account = fromPhrase(phrase);
+    const dSign = rSign();
+    const dBox = rBox();
+    const browserIdentity = {
+      file: {
+        accountSignPub: hex(account.sign.pub),
+        accountEncPub: hex(account.box.pub),
+        device: certifyDevice(account, dSign, dBox, "browser@test"),
+      },
+      deviceSign: dSign,
+      deviceBox: dBox,
+    };
+    const cB = new RelayClient(base, browserIdentity);
+    await cB.register();
+    const remote = await cB.listSpaces();
+    const spaceKey = openBox(fromHex(remote[0].sealedKeys[browserIdentity.file.accountSignPub]), account.box);
+    const updates = await cB.pullUpdates(remote[0].id);
+    assert.equal(decryptDoc(spaceKey, "note-1", updates[0].blob), "browser should read this");
+
+    // the relay serves the app shell
+    const shell = await fetch(`${base}/app`);
+    assert.equal(shell.status, 200);
+    assert.match(await shell.text(), /recovery phrase/i);
+    const bundle = await fetch(`${base}/app/bundle.js`);
+    assert.equal(bundle.status, 200); // built by npm run build
+  } finally {
+    await relay.close();
+  }
+});
+
 test("relay auth: unregistered devices, bad signatures, foreign spaces are rejected", async () => {
   const relay = await startRelay({ port: 0 });
   const base = `http://127.0.0.1:${relay.port}`;

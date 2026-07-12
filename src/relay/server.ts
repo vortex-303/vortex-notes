@@ -16,6 +16,8 @@
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
+import { fileURLToPath } from "node:url";
 import Database from "better-sqlite3";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { verify, fromHex, toHex, utf8 } from "../crypto.js";
@@ -78,6 +80,25 @@ export async function startRelay(
     const route = `${req.method} ${url.pathname}`;
 
     if (route === "GET /health") return sendJson(res, 200, { ok: true });
+
+    if (route === "GET /" || route === "GET /app") {
+      const nonce = crypto.randomBytes(16).toString("base64");
+      res.writeHead(200, {
+        "Content-Type": "text/html; charset=utf-8",
+        "Content-Security-Policy": `default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'`,
+      });
+      return void res.end(appShell(nonce));
+    }
+    if (route === "GET /app/bundle.js") {
+      const here = path.dirname(fileURLToPath(import.meta.url));
+      const bundle = [
+        path.join(here, "../webapp/bundle.js"), // dist/relay → dist/webapp
+        path.join(process.cwd(), "dist/webapp/bundle.js"), // test builds
+      ].find((p) => fs.existsSync(p));
+      if (!bundle) return sendJson(res, 404, { error: "Web app bundle not built (npm run build)" });
+      res.writeHead(200, { "Content-Type": "text/javascript; charset=utf-8" });
+      return void res.end(fs.readFileSync(bundle));
+    }
 
     if (route === "POST /v1/register") {
       const b = parse(body);
@@ -210,4 +231,88 @@ function parse(body: Buffer): Record<string, unknown> {
 function sendJson(res: http.ServerResponse, status: number, data: unknown): void {
   res.writeHead(status, { "Content-Type": "application/json" });
   res.end(JSON.stringify(data));
+}
+
+function appShell(_nonce: string): string {
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vortex Notes</title>
+<style>
+  :root {
+    --ground:#F8FAF8; --surface:#FFFFFF; --ink:#1D2421; --ink-soft:#4A554F; --ink-faint:#75817A;
+    --line:#DFE6E1; --accent:#14735C; --accent-soft:#E3F0EB; --code-bg:#F0F4F1;
+    --mono:ui-monospace,"SF Mono",Menlo,monospace;
+    --serif:"Charter","Iowan Old Style",Georgia,serif;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  }
+  [data-theme="dark"] {
+    --ground:#121715; --surface:#1A211E; --ink:#E6ECE8; --ink-soft:#ACB8B1; --ink-faint:#7D8A83;
+    --line:#2C3531; --accent:#4CC2A0; --accent-soft:#1C2F29; --code-bg:#202824;
+  }
+  * { box-sizing:border-box; } html,body { margin:0; height:100%; }
+  body { background:var(--ground); color:var(--ink); font-family:var(--sans); }
+  #lock { display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; gap:1rem; padding:1rem; }
+  #lock h1 { font:400 1.4rem var(--sans); margin:0; } #lock h1 b { color:var(--accent); font-weight:600; }
+  #lock p { color:var(--ink-soft); font-size:0.85rem; max-width:26rem; text-align:center; margin:0; }
+  #phrase { width:min(30rem,90vw); padding:0.7rem 0.9rem; border:1px solid var(--line); border-radius:8px;
+    background:var(--surface); color:var(--ink); font:0.9rem var(--mono); outline:none; }
+  #phrase:focus { border-color:var(--accent); }
+  #unlockBtn { background:var(--accent); color:#fff; border:none; border-radius:8px; padding:0.6rem 1.4rem;
+    font:600 0.85rem var(--sans); cursor:pointer; }
+  #status { font:0.75rem var(--mono); color:var(--ink-faint); min-height:1.2em; }
+  #main { display:none; height:100vh; }
+  aside { width:280px; flex:none; background:var(--surface); border-right:1px solid var(--line);
+    display:flex; flex-direction:column; overflow-y:auto; }
+  .bar { display:flex; gap:0.4rem; align-items:center; padding:0.9rem 1rem 0.6rem; }
+  .bar h1 { font:400 0.9rem var(--sans); margin:0 auto 0 0; } .bar h1 b { color:var(--accent); font-weight:600; }
+  .bar button { background:none; border:1px solid var(--line); border-radius:6px; color:var(--ink-soft);
+    height:26px; min-width:26px; cursor:pointer; font-size:0.8rem; }
+  .bar button:hover { border-color:var(--accent); color:var(--accent); }
+  #filter { margin:0 1rem 0.6rem; padding:0.45rem 0.7rem; border:1px solid var(--line); border-radius:7px;
+    background:var(--ground); color:var(--ink); font:0.82rem var(--sans); outline:none; }
+  #list { flex:1; padding:0 0.5rem 1rem; }
+  #list a { display:block; padding:0.3rem 0.5rem; border-radius:6px; color:var(--ink-soft); font-size:0.84rem;
+    text-decoration:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #list a:hover, #list a.active { background:var(--accent-soft); color:var(--accent); }
+  .empty { color:var(--ink-faint); font-size:0.8rem; padding:0.5rem; }
+  main.pane { flex:1; overflow-y:auto; }
+  #note { max-width:44rem; margin:0 auto; padding:3rem 2rem 5rem; }
+  .notehead { border-bottom:1px solid var(--line); padding-bottom:0.8rem; margin-bottom:1.4rem; }
+  .notehead .path { font:0.7rem var(--mono); color:var(--ink-faint); }
+  article { font:1rem/1.65 var(--serif); }
+  article h1,article h2,article h3 { line-height:1.25; margin:1.6em 0 0.5em; }
+  article a { color:var(--accent); }
+  article code { font:0.85em var(--mono); background:var(--code-bg); border-radius:4px; padding:0.1em 0.3em; }
+  article pre { background:var(--code-bg); border:1px solid var(--line); border-radius:8px; padding:1rem; overflow-x:auto; }
+  article blockquote { border-left:3px solid var(--accent); margin:1em 0; padding:0.1em 1.1em; color:var(--ink-soft); }
+  article del { color:var(--ink-faint); }
+</style>
+</head>
+<body>
+<div id="lock">
+  <h1><b>Vortex</b> Notes</h1>
+  <p>Enter your recovery phrase. Keys are derived in this tab — the phrase never leaves your browser, and this server only stores ciphertext.</p>
+  <input id="phrase" type="password" placeholder="twelve words separated by spaces" autocomplete="off">
+  <button id="unlockBtn">Unlock</button>
+  <div id="status"></div>
+</div>
+<div id="main">
+  <aside>
+    <div class="bar">
+      <h1><b>Vortex</b> Notes</h1>
+      <button id="refreshBtn" title="Pull latest">⟳</button>
+      <button id="themeBtn" title="Theme">◐</button>
+      <button id="lockBtn" title="Lock">🔒</button>
+    </div>
+    <input id="filter" placeholder="Filter…" autocomplete="off">
+    <nav id="list"></nav>
+  </aside>
+  <main class="pane"><div id="note"><div class="empty" style="margin-top:30vh;text-align:center">Select a note.</div></div></main>
+</div>
+<script src="/app/bundle.js"></script>
+</body>
+</html>`;
 }

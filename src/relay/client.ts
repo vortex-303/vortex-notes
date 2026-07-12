@@ -3,8 +3,8 @@
  * Blobs in, blobs out — all encryption happens before data reaches here.
  */
 import { sha256 } from "@noble/hashes/sha2.js";
-import { sign, toHex, utf8 } from "../crypto.js";
-import type { LoadedIdentity } from "../identity.js";
+import { sign, toHex, utf8, toB64, fromB64 } from "../crypto.js";
+import type { PrincipalIdentity } from "../account.js";
 import type { SpaceRecord } from "../spaces.js";
 
 export interface RemoteUpdate {
@@ -18,7 +18,7 @@ export interface RemoteUpdate {
 export class RelayClient {
   constructor(
     readonly baseUrl: string,
-    readonly identity: LoadedIdentity
+    readonly identity: PrincipalIdentity
   ) {}
 
   async register(): Promise<void> {
@@ -48,7 +48,7 @@ export class RelayClient {
   async pushUpdate(spaceId: string, docId: string, blob: Uint8Array): Promise<number> {
     const res = await ok(
       await this.signed("POST", `/v1/spaces/${spaceId}/docs/${encodeURIComponent(docId)}`, {
-        blob: Buffer.from(blob).toString("base64"),
+        blob: toB64(blob),
       })
     );
     return ((await res.json()) as { seq: number }).seq;
@@ -61,11 +61,11 @@ export class RelayClient {
     const data = (await res.json()) as {
       updates: { seq: number; doc: string; author: string; ts: string; blob: string }[];
     };
-    return data.updates.map((u) => ({ ...u, blob: new Uint8Array(Buffer.from(u.blob, "base64")) }));
+    return data.updates.map((u) => ({ ...u, blob: fromB64(u.blob) }));
   }
 
   private async signed(method: string, pathWithQuery: string, body?: unknown): Promise<Response> {
-    const raw = body === undefined ? Buffer.alloc(0) : Buffer.from(JSON.stringify(body));
+    const raw = body === undefined ? new Uint8Array(0) : utf8(JSON.stringify(body));
     const ts = String(Date.now());
     const canonical = `${method}\n${pathWithQuery}\n${ts}\n${toHex(sha256(raw))}`;
     const sig = toHex(sign(utf8(canonical), this.identity.deviceSign.priv));
@@ -77,7 +77,7 @@ export class RelayClient {
         "x-vortex-ts": ts,
         "x-vortex-sig": sig,
       },
-      body: raw.length ? raw : undefined,
+      body: raw.length ? (raw as unknown as BodyInit) : undefined,
     });
   }
 }
