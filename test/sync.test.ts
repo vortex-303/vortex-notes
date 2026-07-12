@@ -81,6 +81,58 @@ test("sync: link → push → join → pull → bidirectional edits", async () =
   }
 });
 
+test("browser edit loop: an ephemeral browser device pushes; daemon sync writes the file", async () => {
+  const relay = await startRelay({ port: 0 });
+  const base = `http://127.0.0.1:${relay.port}`;
+  const mac = newHome();
+  try {
+    const v1 = freshVault();
+    await as(mac, async () => {
+      const { phrase } = initIdentity("mac");
+      v1.writeNote("ideas.md", "Ideas", "original");
+      await linkVault(v1, base, "personal");
+      await syncVault(v1);
+
+      // simulate the /app browser: account from phrase, in-memory device
+      const { accountFromPhrase, certifyDevice } = await import("../src/account.js");
+      const { randomSignKeypair, randomBoxKeypair, toHex, fromHex, openBox, encryptPayload, utf8 } = await import(
+        "../src/crypto.js"
+      );
+      const { RelayClient } = await import("../src/relay/client.js");
+      const account = accountFromPhrase(phrase);
+      const dSign = randomSignKeypair();
+      const dBox = randomBoxKeypair();
+      const browser = {
+        file: {
+          accountSignPub: toHex(account.sign.pub),
+          accountEncPub: toHex(account.box.pub),
+          device: certifyDevice(account, dSign, dBox, "browser@test"),
+        },
+        deviceSign: dSign,
+        deviceBox: dBox,
+      };
+      const cB = new RelayClient(base, browser);
+      await cB.register();
+      const remote = await cB.listSpaces();
+      const spaceKey = openBox(fromHex(remote[0].sealedKeys[browser.file.accountSignPub]), account.box);
+
+      // browser edits ideas.md and creates a brand-new note
+      const edited = { v: 1, path: "ideas.md", content: "edited in the browser", mtimeMs: Date.now() + 1000 };
+      await cB.pushUpdate(remote[0].id, "ideas.md", encryptPayload(spaceKey, utf8(JSON.stringify(edited)), "vortex-doc-v1:ideas.md"));
+      const fresh = { v: 1, path: "inbox/from-web.md", content: "# From the web\nhello", mtimeMs: Date.now() + 1000 };
+      await cB.pushUpdate(remote[0].id, "inbox/from-web.md", encryptPayload(spaceKey, utf8(JSON.stringify(fresh)), "vortex-doc-v1:inbox/from-web.md"));
+
+      // daemon-side sync (what autosync runs every 30s) materializes both
+      const r = await syncVault(v1);
+      assert.equal(r.pulled, 2);
+      assert.equal(fs.readFileSync(v1.abs("ideas.md"), "utf8"), "edited in the browser");
+      assert.match(fs.readFileSync(v1.abs("inbox/from-web.md"), "utf8"), /From the web/);
+    });
+  } finally {
+    await relay.close();
+  }
+});
+
 test("sync: concurrent edits produce a conflict file, newest wins in place", async () => {
   const relay = await startRelay({ port: 0 });
   const base = `http://127.0.0.1:${relay.port}`;

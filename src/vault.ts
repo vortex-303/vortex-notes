@@ -3,6 +3,9 @@ import path from "node:path";
 import os from "node:os";
 import matter from "gray-matter";
 import { ulid } from "ulid";
+import { titleFromPath, slugify } from "./textutil.js";
+
+export { titleFromPath, slugify };
 
 export interface VaultConfig {
   semantic: boolean;
@@ -212,25 +215,6 @@ export class Vault {
     }
     return rel;
   }
-}
-
-export function titleFromPath(rel: string, body?: string): string {
-  const h1 = body?.match(/^#\s+(.+)$/m);
-  if (h1) return h1[1].trim();
-  const base = rel.split("/").pop() ?? rel;
-  return base.replace(/\.md$/, "");
-}
-
-export function slugify(title: string): string {
-  return (
-    title
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, 80) || "note"
-  );
 }
 
 const WELCOME_BODY = `# Welcome to Vortex Notes

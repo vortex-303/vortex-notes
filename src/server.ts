@@ -7,6 +7,7 @@ import { Vault, slugify } from "./vault.js";
 import { Indexer, startVaultWatcher } from "./indexer.js";
 import { search } from "./search.js";
 import { htmlShell } from "./webui.js";
+import { startAutoSync } from "./autosync.js";
 
 export interface ServeOptions {
   port: number;
@@ -41,6 +42,7 @@ export async function startWebServer(
     for (const res of sseClients) res.write(msg);
   };
   const watcher = startVaultWatcher(vault, indexer, broadcast);
+  const autoSync = startAutoSync(vault); // no-op unless the vault is linked to a relay
   const afterWrite = (rel: string) => {
     indexer.indexNote(rel);
     void indexer.embedPending();
@@ -217,6 +219,7 @@ export async function startWebServer(
   await new Promise<void>((resolve) => server.listen(opts.port, "127.0.0.1", resolve));
   const port = (server.address() as { port: number }).port;
   const close = async () => {
+    autoSync.stop();
     for (const res of sseClients) res.end();
     sseClients.clear();
     await watcher.close();

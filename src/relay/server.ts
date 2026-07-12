@@ -243,57 +243,119 @@ function appShell(_nonce: string): string {
 <style>
   :root {
     --ground:#F8FAF8; --surface:#FFFFFF; --ink:#1D2421; --ink-soft:#4A554F; --ink-faint:#75817A;
-    --line:#DFE6E1; --accent:#14735C; --accent-soft:#E3F0EB; --code-bg:#F0F4F1;
+    --line:#DFE6E1; --accent:#14735C; --accent-soft:#E3F0EB; --code-bg:#F0F4F1; --danger:#A33B2E;
     --mono:ui-monospace,"SF Mono",Menlo,monospace;
     --serif:"Charter","Iowan Old Style",Georgia,serif;
     --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
   }
   [data-theme="dark"] {
     --ground:#121715; --surface:#1A211E; --ink:#E6ECE8; --ink-soft:#ACB8B1; --ink-faint:#7D8A83;
-    --line:#2C3531; --accent:#4CC2A0; --accent-soft:#1C2F29; --code-bg:#202824;
+    --line:#2C3531; --accent:#4CC2A0; --accent-soft:#1C2F29; --code-bg:#202824; --danger:#E08573;
   }
   * { box-sizing:border-box; } html,body { margin:0; height:100%; }
   body { background:var(--ground); color:var(--ink); font-family:var(--sans); }
-  #lock { display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; gap:1rem; padding:1rem; }
-  #lock h1 { font:400 1.4rem var(--sans); margin:0; } #lock h1 b { color:var(--accent); font-weight:600; }
-  #lock p { color:var(--ink-soft); font-size:0.85rem; max-width:26rem; text-align:center; margin:0; }
+
+  .mark { color:var(--accent); display:inline-flex; }
+  .mark svg { width:20px; height:20px; display:block; }
+  .mark .outer, .mark .inner { transform-origin:12px 12px; }
+  .mark .outer { animation:vspin 14s linear infinite; }
+  .mark .inner { animation:vspin-rev 9s linear infinite; }
+  @keyframes vspin { to { transform:rotate(360deg); } }
+  @keyframes vspin-rev { to { transform:rotate(-360deg); } }
+  @media (prefers-reduced-motion: reduce) { .mark .outer, .mark .inner { animation:none; } }
+  .wordmark { display:flex; align-items:center; gap:0.5rem; font:400 0.92rem var(--sans); }
+  .wordmark .vx { color:var(--accent); font-weight:600; }
+  .wordmark .nx { color:var(--ink-soft); margin-left:-0.2rem; }
+
+  #lock { display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; gap:1.1rem; padding:1rem; }
+  #lock .wordmark { font-size:1.35rem; }
+  #lock p { color:var(--ink-soft); font-size:0.85rem; max-width:26rem; text-align:center; margin:0; line-height:1.55; }
   #phrase { width:min(30rem,90vw); padding:0.7rem 0.9rem; border:1px solid var(--line); border-radius:8px;
     background:var(--surface); color:var(--ink); font:0.9rem var(--mono); outline:none; }
   #phrase:focus { border-color:var(--accent); }
-  #unlockBtn { background:var(--accent); color:#fff; border:none; border-radius:8px; padding:0.6rem 1.4rem;
+  #unlockBtn { background:var(--accent); color:#fff; border:none; border-radius:8px; padding:0.6rem 1.5rem;
     font:600 0.85rem var(--sans); cursor:pointer; }
-  #status { font:0.75rem var(--mono); color:var(--ink-faint); min-height:1.2em; }
+  [data-theme="dark"] #unlockBtn { color:#10211C; }
+  #status { font:0.75rem var(--mono); color:var(--ink-faint); min-height:1.2em; max-width:30rem; text-align:center; }
+
   #main { display:none; height:100vh; }
-  aside { width:280px; flex:none; background:var(--surface); border-right:1px solid var(--line);
+  aside { width:290px; flex:none; background:var(--surface); border-right:1px solid var(--line);
     display:flex; flex-direction:column; overflow-y:auto; }
-  .bar { display:flex; gap:0.4rem; align-items:center; padding:0.9rem 1rem 0.6rem; }
-  .bar h1 { font:400 0.9rem var(--sans); margin:0 auto 0 0; } .bar h1 b { color:var(--accent); font-weight:600; }
-  .bar button { background:none; border:1px solid var(--line); border-radius:6px; color:var(--ink-soft);
-    height:26px; min-width:26px; cursor:pointer; font-size:0.8rem; }
-  .bar button:hover { border-color:var(--accent); color:var(--accent); }
-  #filter { margin:0 1rem 0.6rem; padding:0.45rem 0.7rem; border:1px solid var(--line); border-radius:7px;
-    background:var(--ground); color:var(--ink); font:0.82rem var(--sans); outline:none; }
+  .bar { display:flex; gap:0.4rem; align-items:center; padding:0.95rem 1rem 0.7rem; }
+  .bar .wordmark { margin-right:auto; }
+  .iconbtn { background:none; border:1px solid var(--line); border-radius:6px; color:var(--ink-soft);
+    height:27px; min-width:27px; cursor:pointer; font-size:0.85rem; padding:0 0.35rem; }
+  .iconbtn:hover { border-color:var(--accent); color:var(--accent); }
+  #filter { margin:0 1rem 0.6rem; padding:0.48rem 0.7rem; border:1px solid var(--line); border-radius:7px;
+    background:var(--ground); color:var(--ink); font:0.83rem var(--sans); outline:none; }
+  #filter:focus { border-color:var(--accent); }
   #list { flex:1; padding:0 0.5rem 1rem; }
-  #list a { display:block; padding:0.3rem 0.5rem; border-radius:6px; color:var(--ink-soft); font-size:0.84rem;
+  .folder { font:600 0.62rem var(--mono); letter-spacing:0.12em; text-transform:uppercase;
+    color:var(--ink-faint); padding:0.9rem 0.5rem 0.3rem; }
+  #list a { display:block; padding:0.32rem 0.5rem; border-radius:6px; color:var(--ink-soft); font-size:0.86rem;
     text-decoration:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  #list a:hover, #list a.active { background:var(--accent-soft); color:var(--accent); }
+  #list a:hover { background:var(--accent-soft); color:var(--ink); }
+  #list a.active { background:var(--accent-soft); color:var(--accent); font-weight:600; }
   .empty { color:var(--ink-faint); font-size:0.8rem; padding:0.5rem; }
+  .dailybox { padding:0.75rem 1rem; border-top:1px solid var(--line); }
+  .dailybox label { display:block; font:600 0.6rem var(--mono); letter-spacing:0.12em; text-transform:uppercase;
+    color:var(--ink-faint); margin-bottom:0.35rem; }
+  .dailybox input { width:100%; padding:0.45rem 0.65rem; border:1px solid var(--line); border-radius:7px;
+    background:var(--ground); color:var(--ink); font:0.8rem var(--sans); outline:none; }
+  .dailybox input:focus { border-color:var(--accent); }
+
   main.pane { flex:1; overflow-y:auto; }
-  #note { max-width:44rem; margin:0 auto; padding:3rem 2rem 5rem; }
-  .notehead { border-bottom:1px solid var(--line); padding-bottom:0.8rem; margin-bottom:1.4rem; }
-  .notehead .path { font:0.7rem var(--mono); color:var(--ink-faint); }
-  article { font:1rem/1.65 var(--serif); }
-  article h1,article h2,article h3 { line-height:1.25; margin:1.6em 0 0.5em; }
+  #note { max-width:46rem; margin:0 auto; padding:3rem 2.2rem 6rem; }
+  .placeholder { color:var(--ink-faint); font:1rem var(--serif); font-style:italic; margin-top:30vh; text-align:center; }
+  .notehead { border-bottom:1px solid var(--line); padding-bottom:1rem; margin-bottom:1.6rem; }
+  .notehead .meta { font:0.7rem var(--mono); color:var(--ink-faint); letter-spacing:0.05em;
+    display:flex; gap:0.6rem; align-items:center; flex-wrap:wrap; }
+  .notehead .meta .path { margin-right:auto; }
+  .notehead h1 { font:700 2rem/1.15 var(--serif); letter-spacing:-0.015em; margin:0.4rem 0 0; }
+  .mbtn { background:none; border:1px solid var(--line); border-radius:6px; color:var(--ink-soft);
+    font:0.68rem var(--mono); padding:0.2rem 0.55rem; cursor:pointer; }
+  .mbtn:hover { border-color:var(--accent); color:var(--accent); }
+  .mbtn.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  [data-theme="dark"] .mbtn.primary { color:#10211C; }
+
+  article { font:1.02rem/1.68 var(--serif); }
+  article h1, article h2, article h3, article h4 { font-family:var(--serif); letter-spacing:-0.01em;
+    line-height:1.25; margin:1.8em 0 0.5em; }
+  article h1 { font-size:1.55rem; } article h2 { font-size:1.3rem; } article h3 { font-size:1.1rem; }
+  article p { margin:0 0 1em; }
   article a { color:var(--accent); }
-  article code { font:0.85em var(--mono); background:var(--code-bg); border-radius:4px; padding:0.1em 0.3em; }
-  article pre { background:var(--code-bg); border:1px solid var(--line); border-radius:8px; padding:1rem; overflow-x:auto; }
-  article blockquote { border-left:3px solid var(--accent); margin:1em 0; padding:0.1em 1.1em; color:var(--ink-soft); }
+  article code { font:0.85em var(--mono); background:var(--code-bg); border-radius:4px; padding:0.1em 0.35em; }
+  article pre { background:var(--code-bg); border:1px solid var(--line); border-radius:8px; padding:1rem 1.2rem; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:1em 0; padding:0.1em 1.2em; border-left:3px solid var(--accent); color:var(--ink-soft); }
+  article img { max-width:100%; border-radius:6px; }
+  article hr { border:none; border-top:1px solid var(--line); margin:2em 0; }
+  article table { border-collapse:collapse; width:100%; font-size:0.92rem; }
+  article th, article td { border:1px solid var(--line); padding:0.45rem 0.7rem; text-align:left; }
+  article th { background:var(--code-bg); font-family:var(--sans); font-size:0.8rem; }
+  article ul, article ol { padding-left:1.5rem; }
+  article li { margin-bottom:0.3em; }
   article del { color:var(--ink-faint); }
+  article input[type=checkbox] { accent-color:var(--accent); }
+  pre.rawview { font:0.82rem/1.6 var(--mono); white-space:pre-wrap; word-break:break-word; }
+
+  #cm { border:1px solid var(--line); border-radius:8px; background:var(--surface); overflow:hidden; }
+  #cm .cm-editor { min-height:60vh; }
+  #cm .cm-gutters { background:var(--surface); border-right:1px solid var(--line); color:var(--ink-faint); }
+  #cm .cm-activeLine, #cm .cm-activeLineGutter { background:var(--accent-soft); }
+  #cm .cm-cursor { border-left-color:var(--accent); }
+  .editnote { font:0.72rem var(--mono); color:var(--ink-faint); margin-top:0.5rem; }
+
+  @media (max-width:720px) {
+    #main { flex-direction:column; }
+    aside { width:100%; max-height:45vh; border-right:none; border-bottom:1px solid var(--line); }
+    #note { padding:1.5rem 1.2rem 4rem; }
+  }
 </style>
 </head>
 <body>
 <div id="lock">
-  <h1><b>Vortex</b> Notes</h1>
+  <div class="wordmark">${MARK_SVG}<span class="vx">Vortex</span> <span class="nx">Notes</span></div>
   <p>Enter your recovery phrase. Keys are derived in this tab — the phrase never leaves your browser, and this server only stores ciphertext.</p>
   <input id="phrase" type="password" placeholder="twelve words separated by spaces" autocomplete="off">
   <button id="unlockBtn">Unlock</button>
@@ -302,17 +364,36 @@ function appShell(_nonce: string): string {
 <div id="main">
   <aside>
     <div class="bar">
-      <h1><b>Vortex</b> Notes</h1>
-      <button id="refreshBtn" title="Pull latest">⟳</button>
-      <button id="themeBtn" title="Theme">◐</button>
-      <button id="lockBtn" title="Lock">🔒</button>
+      <div class="wordmark">${MARK_SVG}<span class="vx">Vortex</span> <span class="nx">Notes</span></div>
+      <button class="iconbtn" id="newBtn" title="New note">＋</button>
+      <button class="iconbtn" id="refreshBtn" title="Pull latest">⟳</button>
+      <button class="iconbtn" id="themeBtn" title="Theme">◐</button>
+      <button class="iconbtn" id="lockBtn" title="Lock">🔒</button>
     </div>
-    <input id="filter" placeholder="Filter…" autocomplete="off">
+    <input id="filter" placeholder="Filter notes…" autocomplete="off">
     <nav id="list"></nav>
+    <div class="dailybox">
+      <label for="daily">Daily note — press Enter</label>
+      <input id="daily" placeholder="Quick thought…" autocomplete="off">
+    </div>
   </aside>
-  <main class="pane"><div id="note"><div class="empty" style="margin-top:30vh;text-align:center">Select a note.</div></div></main>
+  <main class="pane" id="pane"><div id="note"><div class="placeholder">Select a note, or create one with ＋</div></div></main>
 </div>
 <script src="/app/bundle.js"></script>
 </body>
 </html>`;
 }
+
+const MARK_SVG = `<span class="mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g class="outer" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+<path d="M12 2.75 A9.25 9.25 0 0 1 21.25 12"/>
+<path d="M12 2.75 A9.25 9.25 0 0 1 21.25 12" transform="rotate(120 12 12)"/>
+<path d="M12 2.75 A9.25 9.25 0 0 1 21.25 12" transform="rotate(240 12 12)"/>
+</g>
+<g class="inner" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.5">
+<path d="M12 6.75 A5.25 5.25 0 0 1 17.25 12"/>
+<path d="M12 6.75 A5.25 5.25 0 0 1 17.25 12" transform="rotate(120 12 12)"/>
+<path d="M12 6.75 A5.25 5.25 0 0 1 17.25 12" transform="rotate(240 12 12)"/>
+</g>
+<circle cx="12" cy="12" r="1.6" fill="currentColor"/>
+</svg></span>`;

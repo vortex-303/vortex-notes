@@ -24,6 +24,8 @@ export async function startMcpServer(vault: Vault, opts: McpOptions): Promise<vo
   );
 
   if (opts.watch) startVaultWatcher(vault, indexer);
+  const { startAutoSync } = await import("./autosync.js");
+  startAutoSync(vault); // no-op unless linked to a relay
 
   const server = new McpServer({ name: "vortex-notes", version: "0.1.0" });
   const text = (s: string) => ({ content: [{ type: "text" as const, text: s }] });
