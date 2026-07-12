@@ -8,7 +8,7 @@
  */
 import { marked } from "marked";
 import { EditorView, basicSetup } from "codemirror";
-import { keymap } from "@codemirror/view";
+import { keymap, ViewUpdate } from "@codemirror/view";
 import { markdown } from "@codemirror/lang-markdown";
 import { accountFromPhrase, certifyDevice, type PrincipalIdentity } from "../account.js";
 import {
@@ -158,27 +158,59 @@ function renderList(filter = ""): void {
   $("#list").innerHTML = html || '<div class="empty">Nothing here yet — create a note with ＋</div>';
 }
 
-function metaButtons(mode: "view" | "edit"): string {
-  return mode === "view"
-    ? '<button class="mbtn" id="editBtn">edit</button><button class="mbtn" id="srcBtn">source</button>'
-    : '<button class="mbtn primary" id="saveBtn">save</button><button class="mbtn" id="cancelBtn">cancel</button>';
+function setMobileNoteOpen(open: boolean): void {
+  $("#main").classList.toggle("note-open", open);
+}
+
+let saveTimer: number | undefined;
+let lastSaved = "";
+let saveState: "idle" | "dirty" | "saving" = "idle";
+
+function setSaveState(text: string): void {
+  const el = document.getElementById("savestate");
+  if (el) el.textContent = text;
+}
+
+async function flushSave(path: string): Promise<void> {
+  if (!editor) return;
+  const content = editor.state.doc.toString();
+  if (content === lastSaved) return;
+  saveState = "saving";
+  setSaveState("saving…");
+  try {
+    await pushNote(path, content);
+    lastSaved = content;
+    saveState = "idle";
+    setSaveState("saved");
+    window.setTimeout(() => saveState === "idle" && setSaveState(""), 1500);
+  } catch (e) {
+    saveState = "dirty";
+    setSaveState("offline — retrying");
+    window.setTimeout(() => void flushSave(path), 5000);
+  }
 }
 
 function openNote(path: string): void {
   const n = notes.get(path);
   if (!n) return;
-  closeEditor();
+  void closeEditor();
   current = path;
   const { body } = splitFrontmatter(n.content);
   $("#note").innerHTML =
-    `<div class="notehead"><div class="meta"><span class="path">${esc(n.path)}</span>${metaButtons("view")}</div>` +
+    `<div class="notehead"><div class="meta">` +
+    `<button class="mbtn backbtn" id="backBtn">‹ notes</button>` +
+    `<span class="path">${esc(n.path)}</span><span id="savestate"></span>` +
+    `<button class="mbtn" id="editBtn">edit</button></div>` +
     `<h1>${esc(noteTitle(n))}</h1></div>` +
-    `<article>${marked.parse(body, { async: false }) as string}</article>`;
+    `<article id="article" title="Tap to edit">${marked.parse(body, { async: false }) as string}</article>`;
+  $("#backBtn").addEventListener("click", () => setMobileNoteOpen(false));
   $("#editBtn").addEventListener("click", () => openEditor(path));
-  $("#srcBtn").addEventListener("click", () => {
-    $("#note").querySelector("article")!.outerHTML = `<pre class="rawview">${esc(n.content)}</pre>`;
-    ($("#srcBtn") as HTMLButtonElement).disabled = true;
+  // The text IS the editor: tapping the note body starts editing (links still work).
+  $("#article").addEventListener("click", (e) => {
+    if ((e.target as HTMLElement).closest("a, input")) return;
+    openEditor(path);
   });
+  setMobileNoteOpen(true);
   renderList(($("#filter") as HTMLInputElement).value.trim().toLowerCase());
   $("#pane").scrollTop = 0;
 }
@@ -186,21 +218,21 @@ function openNote(path: string): void {
 function openEditor(path: string): void {
   const n = notes.get(path);
   if (!n) return;
-  closeEditor();
+  void closeEditor();
   current = path;
+  lastSaved = n.content;
   $("#note").innerHTML =
-    `<div class="notehead"><div class="meta"><span class="path">${esc(n.path)}</span>${metaButtons("edit")}</div>` +
+    `<div class="notehead"><div class="meta">` +
+    `<button class="mbtn backbtn" id="backBtn">‹ notes</button>` +
+    `<span class="path">${esc(n.path)}</span><span id="savestate"></span>` +
+    `<button class="mbtn primary" id="doneBtn">done</button></div>` +
     `<h1>${esc(noteTitle(n))}</h1></div><div id="cm"></div>` +
-    `<div class="editnote">full note incl. frontmatter · ⌘S / Ctrl+S saves & pushes encrypted</div>`;
-  const save = () => {
-    const content = editor?.state.doc.toString() ?? n.content;
-    void pushNote(path, content)
-      .then(() => {
-        closeEditor();
-        openNote(path);
-      })
-      .catch((e) => alert((e as Error).message));
-    return true;
+    `<div class="editnote">autosaves as you type · tap done to read</div>`;
+  const scheduleSave = () => {
+    saveState = "dirty";
+    setSaveState("·");
+    window.clearTimeout(saveTimer);
+    saveTimer = window.setTimeout(() => void flushSave(path), 1200);
   };
   editor = new EditorView({
     doc: n.content,
@@ -209,22 +241,52 @@ function openEditor(path: string): void {
       basicSetup,
       markdown(),
       EditorView.lineWrapping,
-      keymap.of([{ key: "Mod-s", run: save }]),
+      keymap.of([{ key: "Mod-s", run: () => (void flushSave(path), true) }]),
+      EditorView.updateListener.of((u: ViewUpdate) => {
+        if (u.docChanged) scheduleSave();
+      }),
+      EditorView.domEventHandlers({ blur: () => void flushSave(path) }),
       EditorView.theme({
-        "&": { fontSize: "0.9rem" },
+        "&": { fontSize: "1rem" },
         ".cm-content": { fontFamily: "var(--mono)", padding: "1rem 0.5rem" },
         "&.cm-focused": { outline: "none" },
       }),
     ],
   });
-  $("#saveBtn").addEventListener("click", () => void save());
-  $("#cancelBtn").addEventListener("click", () => openNote(path));
+  const done = async () => {
+    await closeEditor();
+    openNote(path);
+  };
+  $("#doneBtn").addEventListener("click", () => void done());
+  $("#backBtn").addEventListener("click", () => {
+    void closeEditor();
+    setMobileNoteOpen(false);
+    openNote(path);
+    setMobileNoteOpen(false);
+  });
   editor.focus();
 }
 
-function closeEditor(): void {
-  editor?.destroy();
-  editor = null;
+/** Flush any pending edit, then tear the editor down. */
+async function closeEditor(): Promise<void> {
+  window.clearTimeout(saveTimer);
+  if (editor && current) {
+    const path = current;
+    const content = editor.state.doc.toString();
+    editor.destroy();
+    editor = null;
+    if (content !== lastSaved) {
+      try {
+        await pushNote(path, content);
+        lastSaved = content;
+      } catch {
+        /* offline: content is still in notes map via next autosave attempt */
+      }
+    }
+  } else {
+    editor?.destroy();
+    editor = null;
+  }
 }
 
 // ---------- actions ----------
@@ -288,6 +350,17 @@ $("#list").addEventListener("click", (e) => {
   openNote((a as HTMLElement).dataset.path ?? "");
 });
 $("#newBtn").addEventListener("click", newNote);
+const menu = $("#menu");
+$("#menuBtn").addEventListener("click", (e) => {
+  e.stopPropagation();
+  menu.hidden = !(menu as HTMLElement & { hidden: boolean }).hidden;
+});
+document.addEventListener("click", (e) => {
+  if (!menu.hidden && !(e.target as HTMLElement).closest(".menuwrap")) menu.hidden = true;
+});
+menu.addEventListener("click", (e) => {
+  if ((e.target as HTMLElement).closest(".menuitem")) menu.hidden = true;
+});
 $("#refreshBtn").addEventListener("click", () => void refresh().catch((e) => alert((e as Error).message)));
 $("#filter").addEventListener("input", (e) => renderList((e.target as HTMLInputElement).value.trim().toLowerCase()));
 $("#lockBtn").addEventListener("click", () => {
@@ -301,6 +374,10 @@ $("#daily").addEventListener("keydown", (e) => {
   if (!input.value.trim()) return;
   appendDaily(input.value);
   input.value = "";
+});
+
+window.addEventListener("beforeunload", () => {
+  if (editor && current) void closeEditor();
 });
 
 // theme

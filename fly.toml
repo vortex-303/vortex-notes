@@ -1,0 +1,24 @@
+app = "vortex-relay"
+primary_region = "gru"
+
+[build]
+  dockerfile = "deploy/relay/Dockerfile"
+
+[env]
+  PORT = "7300"
+  RELAY_DB = "/data/relay.db"
+
+[mounts]
+  source = "vortex_relay_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 7300
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

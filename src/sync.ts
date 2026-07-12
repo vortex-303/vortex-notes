@@ -127,6 +127,26 @@ function adoptSpace(
   fs.writeFileSync(spacesFile, JSON.stringify(file, null, 2) + "\n");
 }
 
+/**
+ * Point an already-linked vault at a different relay (e.g. localhost → Fly).
+ * Re-registers this device, re-announces the space with its sealed keys, and
+ * resets the cursor/hashes so the next sync re-pushes the whole vault.
+ */
+export async function relinkVault(vault: Vault, relayUrl: string): Promise<SyncState> {
+  const state = loadSyncState(vault);
+  if (!state) throw new Error("Vault not linked yet — use 'sync link' first.");
+  const identity = loadIdentity();
+  const space = getSpace(state.spaceId);
+  const client = new RelayClient(relayUrl, identity);
+  await client.register();
+  await client.createSpace(space);
+  state.relay = relayUrl;
+  state.cursor = 0;
+  state.files = {};
+  saveSyncState(vault, state);
+  return state;
+}
+
 export interface SyncResult {
   pulled: number;
   pushed: number;

@@ -174,7 +174,7 @@ async function main(): Promise<void> {
     }
     case "sync": {
       requireVault(vault);
-      const { linkVault, joinVault, syncVault, loadSyncState } = await import("./sync.js");
+      const { linkVault, joinVault, syncVault, loadSyncState, relinkVault } = await import("./sync.js");
       const sub = args.positional[0];
       if (sub === "link") {
         const relay = args.flags.get("relay") as string;
@@ -188,6 +188,11 @@ async function main(): Promise<void> {
         const phrase = await promptHidden("Enter your 12-word recovery phrase (needed once to unseal the space key): ");
         const state = await joinVault(vault, relay, phrase, args.flags.get("space") as string | undefined);
         console.log(`Joined space ${state.spaceId}. Run 'vortex-notes sync' to pull your notes.`);
+      } else if (sub === "relink") {
+        const relay = args.flags.get("relay") as string;
+        if (!relay) fail("Usage: vortex-notes sync relink --relay <url>");
+        const state = await relinkVault(vault, relay);
+        console.log(`Relinked to ${relay} (space ${state.spaceId}). Run 'vortex-notes sync' to push everything.`);
       } else if (sub === "status") {
         const state = loadSyncState(vault);
         if (!state) console.log("Not linked. Use 'sync link' or 'sync join'.");

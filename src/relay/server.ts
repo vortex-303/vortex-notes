@@ -89,6 +89,23 @@ export async function startRelay(
       });
       return void res.end(appShell(nonce));
     }
+    if (route === "GET /app/manifest.webmanifest") {
+      res.writeHead(200, { "Content-Type": "application/manifest+json" });
+      return void res.end(JSON.stringify({
+        name: "Vortex Notes",
+        short_name: "Vortex",
+        start_url: "/app",
+        display: "standalone",
+        background_color: "#121715",
+        theme_color: "#14735C",
+        icons: [{
+          src: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%23121715'/%3E%3Cg stroke='%234CC2A0' stroke-width='2' stroke-linecap='round' fill='none'%3E%3Cpath d='M12 3.5 A8.5 8.5 0 0 1 20.5 12'/%3E%3Cpath d='M12 3.5 A8.5 8.5 0 0 1 20.5 12' transform='rotate(120 12 12)'/%3E%3Cpath d='M12 3.5 A8.5 8.5 0 0 1 20.5 12' transform='rotate(240 12 12)'/%3E%3C/g%3E%3Ccircle cx='12' cy='12' r='1.8' fill='%234CC2A0'/%3E%3C/svg%3E",
+          sizes: "any",
+          type: "image/svg+xml",
+          purpose: "any",
+        }],
+      }));
+    }
     if (route === "GET /app/bundle.js") {
       const here = path.dirname(fileURLToPath(import.meta.url));
       const bundle = [
@@ -238,7 +255,14 @@ function appShell(_nonce: string): string {
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#F8FAF8">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#121715">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Vortex Notes">
+<link rel="manifest" href="/app/manifest.webmanifest">
+<link rel="icon" href="data:image/svg+xml,%3Csvg viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cg stroke='%2314735C' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M12 2.75 A9.25 9.25 0 0 1 21.25 12'/%3E%3Cpath d='M12 2.75 A9.25 9.25 0 0 1 21.25 12' transform='rotate(120 12 12)'/%3E%3Cpath d='M12 2.75 A9.25 9.25 0 0 1 21.25 12' transform='rotate(240 12 12)'/%3E%3C/g%3E%3Ccircle cx='12' cy='12' r='2.2' fill='%2314735C'/%3E%3C/svg%3E">
 <title>Vortex Notes</title>
 <style>
   :root {
@@ -286,6 +310,14 @@ function appShell(_nonce: string): string {
   .iconbtn { background:none; border:1px solid var(--line); border-radius:6px; color:var(--ink-soft);
     height:27px; min-width:27px; cursor:pointer; font-size:0.85rem; padding:0 0.35rem; }
   .iconbtn:hover { border-color:var(--accent); color:var(--accent); }
+  .menuwrap { position:relative; }
+  .menu { position:absolute; right:0; top:calc(100% + 6px); z-index:20; min-width:11.5rem;
+    background:var(--surface); border:1px solid var(--line); border-radius:10px;
+    box-shadow:0 8px 28px rgba(0,0,0,0.18); padding:0.35rem; }
+  .menuitem { display:block; width:100%; text-align:left; background:none; border:none;
+    color:var(--ink); font:0.88rem var(--sans); padding:0.65rem 0.8rem; border-radius:7px;
+    cursor:pointer; }
+  .menuitem:hover { background:var(--accent-soft); color:var(--accent); }
   #filter { margin:0 1rem 0.6rem; padding:0.48rem 0.7rem; border:1px solid var(--line); border-radius:7px;
     background:var(--ground); color:var(--ink); font:0.83rem var(--sans); outline:none; }
   #filter:focus { border-color:var(--accent); }
@@ -318,7 +350,9 @@ function appShell(_nonce: string): string {
   .mbtn.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
   [data-theme="dark"] .mbtn.primary { color:#10211C; }
 
-  article { font:1.02rem/1.68 var(--serif); }
+  article { font:1.02rem/1.68 var(--serif); cursor:text; }
+  #savestate { font:0.68rem var(--mono); color:var(--ink-faint); }
+  .backbtn { display:none; }
   article h1, article h2, article h3, article h4 { font-family:var(--serif); letter-spacing:-0.01em;
     line-height:1.25; margin:1.8em 0 0.5em; }
   article h1 { font-size:1.55rem; } article h2 { font-size:1.3rem; } article h3 { font-size:1.1rem; }
@@ -347,10 +381,34 @@ function appShell(_nonce: string): string {
   .editnote { font:0.72rem var(--mono); color:var(--ink-faint); margin-top:0.5rem; }
 
   @media (max-width:720px) {
-    #main { flex-direction:column; }
-    aside { width:100%; max-height:45vh; border-right:none; border-bottom:1px solid var(--line); }
-    #note { padding:1.5rem 1.2rem 4rem; }
+    /* Two-screen navigation: list OR note, never a cramped split. */
+    #main { display:flex; }
+    aside { width:100%; height:100dvh; border-right:none;
+      padding-top:env(safe-area-inset-top); padding-bottom:env(safe-area-inset-bottom); }
+    #main .pane { display:none; }
+    #main.note-open aside { display:none; }
+    #main.note-open .pane { display:block; height:100dvh;
+      padding-top:env(safe-area-inset-top); }
+    .backbtn { display:inline-block; }
+    #note { padding:1rem 1.1rem 6rem; }
+    .notehead { position:sticky; top:0; background:var(--ground); z-index:2;
+      padding-top:0.6rem; }
+    .notehead h1 { font-size:1.5rem; }
+    /* 16px inputs stop iOS zoom-on-focus; bigger touch targets everywhere */
+    #filter, .dailybox input, #phrase { font-size:16px; }
+    #list a { padding:0.62rem 0.6rem; font-size:1rem; }
+    .folder { padding-top:1.1rem; }
+    .iconbtn { height:44px; min-width:44px; font-size:1.15rem; border-radius:9px; }
+    .mbtn { padding:0.55rem 0.95rem; font-size:0.8rem; min-height:40px; border-radius:8px; }
+    .menuitem { padding:0.85rem 1rem; font-size:1rem; }
+    .menu { min-width:13rem; }
+    .bar { padding:0.8rem 0.9rem 0.6rem; gap:0.55rem; }
+    .dailybox { position:sticky; bottom:0; background:var(--surface);
+      padding-bottom:calc(0.75rem + env(safe-area-inset-bottom)); }
+    #cm .cm-editor { min-height:70dvh; }
+    article { font-size:1.05rem; }
   }
+  @media (hover:hover) { article:hover { outline:1px dashed var(--line); outline-offset:8px; border-radius:4px; } }
 </style>
 </head>
 <body>
@@ -366,9 +424,14 @@ function appShell(_nonce: string): string {
     <div class="bar">
       <div class="wordmark">${MARK_SVG}<span class="vx">Vortex</span> <span class="nx">Notes</span></div>
       <button class="iconbtn" id="newBtn" title="New note">＋</button>
-      <button class="iconbtn" id="refreshBtn" title="Pull latest">⟳</button>
-      <button class="iconbtn" id="themeBtn" title="Theme">◐</button>
-      <button class="iconbtn" id="lockBtn" title="Lock">🔒</button>
+      <div class="menuwrap">
+        <button class="iconbtn" id="menuBtn" title="Menu" aria-haspopup="true">⋯</button>
+        <div class="menu" id="menu" hidden>
+          <button class="menuitem" id="refreshBtn">⟳&ensp;Pull latest</button>
+          <button class="menuitem" id="themeBtn">◐&ensp;Light / dark</button>
+          <button class="menuitem" id="lockBtn">🔒&ensp;Lock</button>
+        </div>
+      </div>
     </div>
     <input id="filter" placeholder="Filter notes…" autocomplete="off">
     <nav id="list"></nav>
