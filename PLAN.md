@@ -50,8 +50,11 @@ Slices, each shippable:
   certified device (keys in localStorage), unseals space key, decrypts notes in-tab.
   Read-only v0; TODO: edit+push from browser, service worker/PWA manifest, IndexedDB
   instead of localStorage, space picker (uses first space).
-- [ ] **1e. Editor**: TipTap (MIT core) + CodeMirror source toggle; per-note Yjs
-  docs stored encrypted (decision point: plain-blob LWW first, CRDT after)
+- [~] **1e. Editor** — part 1 DONE (2026-07-12): /app unified with full brand UI
+  (mark, titles, folder groups, daily capture) + CodeMirror 6 markdown editing
+  pushing encrypted updates; daemons auto-sync every 30s (src/autosync.ts) so
+  browser edits land in local files. Part 2 TODO: per-note CRDT (Yjs) replacing
+  whole-file LWW; TipTap block mode as alternate view; bundle diet (711KB).
 Yjs canonical (Y.Doc per note), daemon materializes the md vault as projection;
 secsync-pattern encrypted relay (dumb ciphertext store, Fly.io); libsodium key
 hierarchy: mnemonic → account Ed25519/X25519 → per-space keys sealed to member
