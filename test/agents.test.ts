@@ -108,6 +108,49 @@ test("agent lifecycle: create → connect → scoped sync both ways → attribut
   }
 });
 
+test("single-command bootstrap: ensureAgentConnected derives paths, is idempotent", async () => {
+  const relay = await startRelay({ port: 0 });
+  const base = `http://127.0.0.1:${relay.port}`;
+  const owner = newHome();
+  try {
+    const v = freshVault();
+    const token = await as(owner, async () => {
+      initIdentity("mac");
+      v.writeNote("hello.md", "Hello", "for the one-command agent");
+      await linkVault(v, base, "work");
+      await syncVault(v);
+      return (await createAgent("solo", ["work"], "rw", base)).token;
+    });
+
+    // simulate the agent machine: derived home/vault under a temp agents dir
+    const prevHome = process.env.VORTEX_NOTES_HOME;
+    const prevDir = process.env.VORTEX_NOTES_AGENTS_DIR;
+    delete process.env.VORTEX_NOTES_HOME;
+    process.env.VORTEX_NOTES_AGENTS_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "vortex-agents-dir-"));
+    try {
+      const { ensureAgentConnected } = await import("../src/agents.js");
+      const first = await ensureAgentConnected(token);
+      assert.equal(first.firstRun, true);
+      assert.match(first.vault, /solo-/);
+      const pull = await syncVault(new Vault(first.vault));
+      assert.ok(pull.pulled >= 1);
+      assert.match(fs.readFileSync(path.join(first.vault, "hello.md"), "utf8"), /one-command agent/);
+
+      // second run: reuses everything
+      delete process.env.VORTEX_NOTES_HOME;
+      const second = await ensureAgentConnected(token);
+      assert.equal(second.firstRun, false);
+      assert.equal(second.vault, first.vault);
+    } finally {
+      process.env.VORTEX_NOTES_HOME = prevHome;
+      if (prevDir === undefined) delete process.env.VORTEX_NOTES_AGENTS_DIR;
+      else process.env.VORTEX_NOTES_AGENTS_DIR = prevDir;
+    }
+  } finally {
+    await relay.close();
+  }
+});
+
 test("read-only agent: relay rejects its writes; forged agent certs are rejected", async () => {
   const relay = await startRelay({ port: 0 });
   const base = `http://127.0.0.1:${relay.port}`;

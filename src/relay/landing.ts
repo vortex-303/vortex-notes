@@ -120,13 +120,12 @@ vortex-notes search "that idea"      <span class="c"># hybrid semantic search, f
 vortex-notes agent create hermes --space personal \\
   --relay https://vortex-relay.fly.dev        <span class="c"># add --read-only for search-only</span>
 
-<span class="c"># 2 · On the AGENT's machine (or same one) — paste the token:</span>
-export VORTEX_NOTES_HOME=~/.vortex-hermes
-vortex-notes agent connect 'vnat1_…' --vault ~/hermes-vault
-vortex-notes sync --vault ~/hermes-vault
+<span class="c"># 2 · On the AGENT's machine — ONE command. It bootstraps itself on
+#     first run (identity, vault, first sync) and serves MCP, auto-syncing:</span>
+vortex-notes agent mcp 'vnat1_…'
 
-<span class="c"># 3 · Wire it to the agent harness via MCP (auto-syncs every 30s):</span>
-vortex-notes mcp --vault ~/hermes-vault</pre>
+<span class="c"># …or as a line in any MCP config:</span>
+{ "command": "vortex-notes", "args": ["agent", "mcp", "vnat1_…"] }</pre>
   <p class="note">Skills that teach the conventions to
   <a href="https://github.com/vortex-303/vortex-notes">OpenClaw and Hermes</a> ship in the repo.
   Revoke anytime: <code>vortex-notes agent revoke hermes --relay …</code></p>

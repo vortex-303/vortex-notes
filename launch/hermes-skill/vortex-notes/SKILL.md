@@ -73,6 +73,13 @@ Preferred when the harness supports MCP (stdio):
 { "command": "vortex-notes", "args": ["mcp", "--vault", "<vault>"] }
 ```
 
+If the user granted this agent its own scoped access (an `vnat1_…` agent token),
+a single self-bootstrapping command replaces all setup:
+
+```json
+{ "command": "vortex-notes", "args": ["agent", "mcp", "<vnat1_token>"] }
+```
+
 Tools: `search_notes`, `read_note`, `write_note`, `edit_note` (surgical),
 `append_daily`, `remember` (facts with supersession), `build_context` (top notes
 plus one hop of wikilinks in one call), `recent_activity`, `list_notes`.

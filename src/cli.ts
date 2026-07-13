@@ -28,8 +28,10 @@ Usage:
 
   vortex-notes agent create <name> --space <name|id>[,<more>] --relay <url> [--read-only]
                                                 Grant an agent scoped access; prints its token ONCE
+  vortex-notes agent mcp <token>                ONE command on the agent's machine: bootstrap
+                                                on first run, then serve MCP (stdio), auto-sync
   vortex-notes agent connect <token> [--vault <dir>]
-                                                (on the agent's machine) become that agent
+                                                Bootstrap only (prints paths + MCP wiring)
   vortex-notes agent list                       Agents you've created here
   vortex-notes agent revoke <name> --relay <url>
                                                 Cut an agent off (relay ban + grant removal)
@@ -214,7 +216,7 @@ async function main(): Promise<void> {
       break;
     }
     case "agent": {
-      const { createAgent, connectAgent, listAgents, revokeAgent } = await import("./agents.js");
+      const { createAgent, ensureAgentConnected, listAgents, revokeAgent } = await import("./agents.js");
       const sub = args.positional[0];
       if (sub === "create") {
         const name = args.positional[1];
@@ -235,10 +237,22 @@ On the agent's machine:
       } else if (sub === "connect") {
         const token = args.positional[1];
         if (!token) fail("Usage: vortex-notes agent connect <token> [--vault <dir>]");
-        const r = await connectAgent(token, args.flags.get("vault") as string | undefined);
-        console.log(`Connected as agent "${r.name}" (account ${r.fingerprint}).`);
-        console.log(`Granted spaces: ${r.spaces.join(", ")}`);
-        if (r.vault) console.log(`Vault ready at ${r.vault} — run 'vortex-notes sync --vault ${r.vault}' to pull notes.`);
+        const r = await ensureAgentConnected(token, args.flags.get("vault") as string | undefined);
+        const { syncVault } = await import("./sync.js");
+        const { Vault: V } = await import("./vault.js");
+        const pull = await syncVault(new V(r.vault));
+        console.log(`${r.firstRun ? "Connected" : "Already connected"} as agent "${r.name}" (${r.mode === "ro" ? "read-only" : "read+write"}).`);
+        console.log(`Vault: ${r.vault} (pulled ${pull.pulled} notes)`);
+        console.log(`
+Wire it into any MCP harness — this single command does everything:`);
+        console.log(`  vortex-notes agent mcp '<token>'`);
+      } else if (sub === "mcp") {
+        const token = args.positional[1];
+        if (!token) fail("Usage: vortex-notes agent mcp <token>");
+        const r = await ensureAgentConnected(token);
+        const { Vault: V } = await import("./vault.js");
+        console.error(`[vortex-notes] agent "${r.name}" ${r.firstRun ? "bootstrapped" : "ready"} (${r.mode}) — vault ${r.vault}`);
+        await startMcpServer(new V(r.vault), { readOnly: r.mode === "ro", watch: true });
       } else if (sub === "list") {
         const agents = listAgents();
         if (!agents.length) {

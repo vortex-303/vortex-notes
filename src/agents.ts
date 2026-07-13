@@ -28,6 +28,8 @@ import { getSpace, openSpaceKey, grantSpace } from "./spaces.js";
 import { adoptSpace, type SyncState } from "./sync.js";
 import { RelayClient } from "./relay/client.js";
 import { Vault } from "./vault.js";
+import { slugify } from "./textutil.js";
+import os from "node:os";
 
 const TOKEN_PREFIX = "vnat1_";
 
@@ -114,6 +116,48 @@ export async function createAgent(
   return { token: TOKEN_PREFIX + Buffer.from(JSON.stringify(token)).toString("base64url"), record };
 }
 
+export function parseToken(tokenStr: string): AgentToken {
+  if (!tokenStr.startsWith(TOKEN_PREFIX)) throw new Error("Not a vortex agent token (expected vnat1_…).");
+  return JSON.parse(Buffer.from(tokenStr.slice(TOKEN_PREFIX.length), "base64url").toString("utf8")) as AgentToken;
+}
+
+/** Stable per-agent locations derived from the token — no env juggling needed. */
+export function defaultAgentPaths(tokenStr: string): { home: string; vault: string; name: string } {
+  const t = parseToken(tokenStr);
+  const base = process.env.VORTEX_NOTES_AGENTS_DIR ?? path.join(os.homedir(), ".vortex-agents");
+  const dir = path.join(base, `${slugify(t.cert.name)}-${t.cert.signPub.slice(0, 8)}`);
+  return { home: path.join(dir, "home"), vault: path.join(dir, "vault"), name: t.cert.name };
+}
+
+/**
+ * Idempotent single-command bootstrap: sets the agent's own home, connects
+ * on first run, reuses everything on later runs. Returns the vault path.
+ */
+export async function ensureAgentConnected(tokenStr: string, vaultOverride?: string): Promise<{
+  name: string;
+  vault: string;
+  home: string;
+  mode: "ro" | "rw";
+  firstRun: boolean;
+}> {
+  const t = parseToken(tokenStr);
+  const paths = defaultAgentPaths(tokenStr);
+  const home = process.env.VORTEX_NOTES_HOME ?? paths.home;
+  process.env.VORTEX_NOTES_HOME = home;
+  const vaultDir = vaultOverride ?? paths.vault;
+
+  const idFile = path.join(home, "identity.json");
+  if (fs.existsSync(idFile)) {
+    const existing = JSON.parse(fs.readFileSync(idFile, "utf8")) as IdentityFile;
+    if (existing.device.signPub !== t.cert.signPub) {
+      throw new Error(`${home} belongs to a different agent (${existing.device.name}).`);
+    }
+    return { name: t.cert.name, vault: vaultDir, home, mode: t.cert.mode ?? "rw", firstRun: false };
+  }
+  await connectAgent(tokenStr, vaultDir);
+  return { name: t.cert.name, vault: vaultDir, home, mode: t.cert.mode ?? "rw", firstRun: true };
+}
+
 /**
  * Agent side: turn a token into a working identity + synced vault.
  * After this, `vortex-notes sync` / `mcp` / `serve` behave normally —
@@ -126,8 +170,7 @@ export async function connectAgent(
   if (hasIdentity()) {
     throw new Error(`This home (${vortexHome()}) already has an identity. Use a fresh VORTEX_NOTES_HOME for each agent.`);
   }
-  if (!tokenStr.startsWith(TOKEN_PREFIX)) throw new Error("Not a vortex agent token (expected vnat1_…).");
-  const token = JSON.parse(Buffer.from(tokenStr.slice(TOKEN_PREFIX.length), "base64url").toString("utf8")) as AgentToken;
+  const token = parseToken(tokenStr);
 
   const file: IdentityFile = {
     v: 1,
