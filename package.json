@@ -18,7 +18,8 @@
     "dev": "tsx src/cli.ts",
     "test": "node --test \"dist-test/test/*.test.js\"",
     "pretest": "tsc -p tsconfig.test.json",
-    "build:web": "esbuild src/webapp/main.ts --bundle --minify --format=iife --platform=browser --outfile=dist/webapp/bundle.js"
+    "build:web": "esbuild src/webapp/main.ts --bundle --minify --format=iife --platform=browser --outfile=dist/webapp/bundle.js",
+    "prepublishOnly": "npm run build"
   },
   "keywords": [
     "mcp",
@@ -53,5 +54,10 @@
     "esbuild": "^0.28.1",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vortex-303/vortex-notes.git"
+  },
+  "homepage": "https://github.com/vortex-303/vortex-notes#readme"
 }

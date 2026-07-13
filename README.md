@@ -29,8 +29,11 @@ git them, point Obsidian at them. What Vortex Notes adds:
   clickable `[[wikilinks]]`, hybrid search, a source-view toggle, and live
   reload when you or an agent edits a note.
 
-No accounts. No sync (yet — E2E-encrypted sync is what we're building next).
-No plugins. MIT.
+No accounts required. No plugins. MIT. And when you want your notes on every
+device: **end-to-end encrypted sync** — a 12-word recovery phrase is your whole
+identity, the relay stores only ciphertext (self-host it with one command, or
+use a hosted one), and a mobile-friendly web app with Obsidian-style live-preview
+editing decrypts everything client-side.
 
 ## Install
 
@@ -77,11 +80,27 @@ app-must-be-running integrations. Vortex Notes starts from the middle: one vault
 that is both your notes and your agents' memory, with search that actually works
 and files you can walk away with at any moment.
 
+## Sync (optional, E2EE)
+
+```sh
+vortex-notes identity init                     # your 12 words — shown once
+vortex-notes relay --port 7300 --db relay.db   # self-host the ciphertext store…
+vortex-notes sync link --relay <url> --space personal
+vortex-notes sync                              # …and on another machine:
+vortex-notes identity login && vortex-notes sync join --relay <url>
+```
+
+The relay never sees plaintext — not note content, not names, not keys. The
+web app it serves at `/app` does all crypto in the browser: create an account,
+type your phrase, read and edit anywhere (live-preview markdown, installable
+as a PWA). Deletions propagate; concurrent edits 3-way-merge; conflicts never
+lose words.
+
 ## Roadmap
 
-- End-to-end encrypted multi-device sync (the server stores ciphertext only)
-- A premium web editor over the same vault
-- Agents as first-class principals: per-space grants, signed attribution,
-  per-agent undo, and a "what your agents learned this week" review queue
+- Agents as first-class principals: share a space with an agent like you'd
+  share it with a person (scoped, revocable), signed per-line attribution,
+  per-agent undo, and a "what your agents learned this week" review inbox
+- Instant push sync (WebSocket) and real-time collaboration
 
 MIT © Vortex303
