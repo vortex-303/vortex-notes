@@ -44,7 +44,7 @@ pollution was the interesting bug) or the E2EE + agents design.
 ## Launch checklist
 - [x] GitHub repo created (vortex-303/vortex-notes, PRIVATE — flip to public at launch, set topics: mcp, agent-memory, notes, e2ee, markdown)
 - [x] OpenClaw skill written (launch/openclaw-skill/vortex-notes/SKILL.md, verified against docs.openclaw.ai AgentSkills format) — submit to their skills registry at launch
-- [ ] npm publish (name `vortex-notes` confirmed free) — NEEDS USER (npm account/login)
+- [x] npm publish — LIVE 2026-07-13: vortex-notes@0.1.0 (npmjs.com/package/vortex-notes, account: mailstorm)
 - [ ] Demo GIF in README (asciinema → agg: init → claude mcp add → agent writes a note → search in Spanish) — NEEDS USER or screen-record session
 - [ ] Flip repo public + submit HN Tue–Thu ~14:00 UTC; be online for the first 2h of comments
 - [ ] Post to r/ClaudeAI, OpenClaw Discord, MCP directories (mcp.directory, mcpservers.org) after HN
