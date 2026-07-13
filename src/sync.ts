@@ -28,6 +28,8 @@ export interface SyncState {
   cursor: number;
   /** path → sha256 of file content as of last successful sync */
   files: Record<string, string>;
+  /** agent vaults: the VORTEX_NOTES_HOME holding this principal's identity */
+  home?: string;
 }
 
 interface DocPayload {
@@ -163,6 +165,7 @@ export interface SyncResult {
 export async function syncVault(vault: Vault): Promise<SyncResult> {
   const state = loadSyncState(vault);
   if (!state) throw new Error("Vault not linked. Run 'vortex-notes sync link' (or 'sync join' on a second machine).");
+  if (state.home) process.env.VORTEX_NOTES_HOME = state.home; // agent vaults carry their identity home
   const identity = loadIdentity();
   const space = getSpace(state.spaceId);
   const key = openSpaceKey(identity, space);

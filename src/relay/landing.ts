@@ -125,7 +125,12 @@ vortex-notes agent create hermes --space personal \\
 vortex-notes agent mcp 'vnat1_…'
 
 <span class="c"># …or as a line in any MCP config:</span>
-{ "command": "vortex-notes", "args": ["agent", "mcp", "vnat1_…"] }</pre>
+{ "command": "vortex-notes", "args": ["agent", "mcp", "vnat1_…"] }
+
+<span class="c"># Prefer no token at all? Pair like a TV app — on the agent's machine:</span>
+vortex-notes agent request --relay https://vortex-relay.fly.dev --name hermes
+<span class="c">#   → shows a 6-letter code and waits. On YOUR machine:</span>
+vortex-notes agent approve CODE --space personal --relay https://vortex-relay.fly.dev</pre>
   <p class="note">Skills that teach the conventions to
   <a href="https://github.com/vortex-303/vortex-notes">OpenClaw and Hermes</a> ship in the repo.
   Revoke anytime: <code>vortex-notes agent revoke hermes --relay …</code></p>

@@ -46,6 +46,34 @@ export class RelayClient {
     return data.spaces;
   }
 
+  /** Unauthenticated: ask to pair (the requester has no identity yet). */
+  static async requestPairing(baseUrl: string, name: string, signPub: string, encPub: string): Promise<string> {
+    const res = await ok(
+      await fetch(`${baseUrl}/v1/pair/request`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, signPub, encPub }),
+      })
+    );
+    return ((await res.json()) as { code: string }).code;
+  }
+
+  /** Unauthenticated: poll for approval. Returns the sealed grant when approved. */
+  static async pollPairing(baseUrl: string, code: string, signPub: string): Promise<string | null> {
+    const res = await ok(await fetch(`${baseUrl}/v1/pair/poll?code=${encodeURIComponent(code)}&signPub=${signPub}`));
+    const data = (await res.json()) as { status: string; grant?: string };
+    return data.status === "approved" ? (data.grant ?? null) : null;
+  }
+
+  async getPairing(code: string): Promise<{ code: string; name: string; signPub: string; encPub: string }> {
+    const res = await ok(await this.signed("GET", `/v1/pair/pending?code=${encodeURIComponent(code)}`));
+    return (await res.json()) as { code: string; name: string; signPub: string; encPub: string };
+  }
+
+  async approvePairing(code: string, grantB64: string): Promise<void> {
+    await ok(await this.signed("POST", "/v1/pair/approve", { code, grant: grantB64 }));
+  }
+
   async listPrincipals(): Promise<
     { signPub: string; name: string; kind: string; spaces?: string[]; mode?: string; registeredAt: string }[]
   > {

@@ -61,7 +61,23 @@ export async function startRelay(
       ts TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS updates_space_seq ON updates(space, seq);
+    CREATE TABLE IF NOT EXISTS pair_requests (
+      code TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      signPub TEXT NOT NULL,
+      encPub TEXT NOT NULL,
+      createdAt INTEGER NOT NULL,
+      approvedBlob TEXT
+    );
   `);
+
+  const PAIR_TTL_MS = 15 * 60 * 1000;
+  const pruneAndGetPair = (code: string) => {
+    db.prepare("DELETE FROM pair_requests WHERE createdAt < ?").run(Date.now() - PAIR_TTL_MS);
+    return db.prepare("SELECT * FROM pair_requests WHERE code=?").get(code) as
+      | { code: string; name: string; signPub: string; encPub: string; createdAt: number; approvedBlob: string | null }
+      | undefined;
+  };
 
   const server = http.createServer((req, res) => {
     const chunks: Buffer[] = [];
@@ -125,6 +141,33 @@ export async function startRelay(
       return void res.end(fs.readFileSync(bundle));
     }
 
+    if (route === "POST /v1/pair/request") {
+      const b = parse(body);
+      const name = String(b.name ?? "agent").slice(0, 60);
+      const signPub = String(b.signPub ?? "");
+      const encPub = String(b.encPub ?? "");
+      if (!/^[0-9a-f]{64}$/.test(signPub) || !/^[0-9a-f]{64}$/.test(encPub)) {
+        return sendJson(res, 400, { error: "signPub and encPub (32-byte hex) required" });
+      }
+      const alphabet = "ABCDEFGHJKMNPQRSTVWXYZ23456789";
+      let code = "";
+      for (const byte of crypto.randomBytes(6)) code += alphabet[byte % alphabet.length];
+      db.prepare("DELETE FROM pair_requests WHERE createdAt < ?").run(Date.now() - PAIR_TTL_MS);
+      db.prepare("INSERT INTO pair_requests (code, name, signPub, encPub, createdAt) VALUES (?, ?, ?, ?, ?)")
+        .run(code, name, signPub, encPub, Date.now());
+      return sendJson(res, 200, { code, expiresInMs: PAIR_TTL_MS });
+    }
+    if (route === "GET /v1/pair/poll") {
+      const code = url.searchParams.get("code") ?? "";
+      const signPub = url.searchParams.get("signPub") ?? "";
+      const row = pruneAndGetPair(code);
+      if (!row) return sendJson(res, 404, { error: "Unknown or expired pairing code" });
+      if (row.signPub !== signPub) return sendJson(res, 403, { error: "Not your pairing request" });
+      if (!row.approvedBlob) return sendJson(res, 200, { status: "pending" });
+      db.prepare("DELETE FROM pair_requests WHERE code=?").run(code);
+      return sendJson(res, 200, { status: "approved", grant: row.approvedBlob });
+    }
+
     if (route === "POST /v1/register") {
       const b = parse(body);
       const accountSignPub = String(b.accountSignPub ?? "");
@@ -156,6 +199,25 @@ export async function startRelay(
     const scope = isAgent ? auth.cert?.spaces ?? [] : null; // agents: only certified spaces
     const readOnly = isAgent && auth.cert?.mode === "ro";
     const inScope = (spaceId: string) => scope === null || scope.includes(spaceId);
+
+    if (route === "GET /v1/pair/pending") {
+      if (isAgent) return sendJson(res, 403, { error: "Agents cannot approve pairings" });
+      const code = url.searchParams.get("code") ?? "";
+      const row = pruneAndGetPair(code);
+      if (!row) return sendJson(res, 404, { error: "Unknown or expired pairing code" });
+      return sendJson(res, 200, { code: row.code, name: row.name, signPub: row.signPub, encPub: row.encPub });
+    }
+    if (route === "POST /v1/pair/approve") {
+      if (isAgent) return sendJson(res, 403, { error: "Agents cannot approve pairings" });
+      const b = parse(body);
+      const code = String(b.code ?? "");
+      const grant = String(b.grant ?? "");
+      const row = pruneAndGetPair(code);
+      if (!row) return sendJson(res, 404, { error: "Unknown or expired pairing code" });
+      if (!grant) return sendJson(res, 400, { error: "grant (base64) required" });
+      db.prepare("UPDATE pair_requests SET approvedBlob=? WHERE code=?").run(grant, code);
+      return sendJson(res, 200, { ok: true });
+    }
 
     if (route === "GET /v1/principals") {
       const rows = db.prepare("SELECT signPub, cert, createdAt FROM devices WHERE account=?").all(account) as {

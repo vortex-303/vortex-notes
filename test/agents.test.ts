@@ -151,6 +151,61 @@ test("single-command bootstrap: ensureAgentConnected derives paths, is idempoten
   }
 });
 
+test("pairing: agent requests with a short code, owner approves, keys never travel", async () => {
+  const relay = await startRelay({ port: 0 });
+  const base = `http://127.0.0.1:${relay.port}`;
+  const owner = newHome();
+  try {
+    const v = freshVault();
+    await as(owner, async () => {
+      initIdentity("mac");
+      v.writeNote("paired.md", "Paired", "hello paired agent");
+      await linkVault(v, base, "work");
+      await syncVault(v);
+    });
+
+    // agent machine: no identity, no token — just a code
+    const prevHome = process.env.VORTEX_NOTES_HOME;
+    const prevDir = process.env.VORTEX_NOTES_AGENTS_DIR;
+    delete process.env.VORTEX_NOTES_HOME;
+    process.env.VORTEX_NOTES_AGENTS_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "vortex-pair-agents-"));
+    try {
+      const { requestPairing } = await import("../src/agents.js");
+      const { code, complete } = await requestPairing(base, "paired-bot");
+      assert.match(code, /^[A-Z2-9]{6}$/);
+
+      // owner approves from their machine (read-only grant)
+      await as(owner, async () => {
+        const { approvePairing } = await import("../src/agents.js");
+        const record = await approvePairing(code, ["work"], "ro", base);
+        assert.equal(record.name, "paired-bot");
+        assert.equal(record.mode, "ro");
+      });
+
+      const done = await complete({ intervalMs: 50, timeoutMs: 10_000 });
+      assert.equal(done.name, "paired-bot");
+      const agentVault = new Vault(done.vault);
+      const pull = await syncVault(agentVault);
+      assert.ok(pull.pulled >= 1);
+      assert.match(fs.readFileSync(agentVault.abs("paired.md"), "utf8"), /hello paired agent/);
+
+      // read-only is enforced end to end
+      agentVault.writeNote("nope.md", "Nope", "should be rejected");
+      await assert.rejects(syncVault(agentVault), /read-only/i);
+
+      // the code is consumed: polling again 404s
+      const res = await fetch(`${base}/v1/pair/poll?code=${code}&signPub=${"0".repeat(64)}`);
+      assert.equal(res.status, 404);
+    } finally {
+      process.env.VORTEX_NOTES_HOME = prevHome;
+      if (prevDir === undefined) delete process.env.VORTEX_NOTES_AGENTS_DIR;
+      else process.env.VORTEX_NOTES_AGENTS_DIR = prevDir;
+    }
+  } finally {
+    await relay.close();
+  }
+});
+
 test("read-only agent: relay rejects its writes; forged agent certs are rejected", async () => {
   const relay = await startRelay({ port: 0 });
   const base = `http://127.0.0.1:${relay.port}`;
@@ -184,7 +239,7 @@ test("read-only agent: relay rejects its writes; forged agent certs are rejected
       const rogueDevice = randomSignKeypair();
       const aSign = randomSignKeypair();
       const aBox = randomBoxKeypair();
-      const forged = certifyAgent(rogueDevice, aSign, aBox, "evil", ["work"], "rw");
+      const forged = certifyAgent(rogueDevice, aSign.pub, aBox.pub, "evil", ["work"], "rw");
       const ownerIdentity = await as(owner, () => loadIdentity());
       const res = await fetch(`${base}/v1/register`, {
         method: "POST",

@@ -28,6 +28,11 @@ Usage:
 
   vortex-notes agent create <name> --space <name|id>[,<more>] --relay <url> [--read-only]
                                                 Grant an agent scoped access; prints its token ONCE
+  vortex-notes agent request --relay <url> [--name <agent>]
+                                                No-token pairing: prints a short code, waits
+                                                for your approval, sets everything up
+  vortex-notes agent approve <code> --space <name|id>[,..] --relay <url> [--read-only]
+                                                (on YOUR machine) approve a pairing code
   vortex-notes agent mcp <token>                ONE command on the agent's machine: bootstrap
                                                 on first run, then serve MCP (stdio), auto-sync
   vortex-notes agent connect <token> [--vault <dir>]
@@ -216,7 +221,7 @@ async function main(): Promise<void> {
       break;
     }
     case "agent": {
-      const { createAgent, ensureAgentConnected, listAgents, revokeAgent } = await import("./agents.js");
+      const { createAgent, ensureAgentConnected, listAgents, revokeAgent, requestPairing, approvePairing } = await import("./agents.js");
       const sub = args.positional[0];
       if (sub === "create") {
         const name = args.positional[1];
@@ -253,6 +258,27 @@ Wire it into any MCP harness — this single command does everything:`);
         const { Vault: V } = await import("./vault.js");
         console.error(`[vortex-notes] agent "${r.name}" ${r.firstRun ? "bootstrapped" : "ready"} (${r.mode}) — vault ${r.vault}`);
         await startMcpServer(new V(r.vault), { readOnly: r.mode === "ro", watch: true });
+      } else if (sub === "request") {
+        const relay = args.flags.get("relay") as string;
+        if (!relay) fail("Usage: vortex-notes agent request --relay <url> [--name <agent>]");
+        const name = (args.flags.get("name") as string) ?? "agent";
+        const { code, complete } = await requestPairing(relay, name);
+        console.log(`Pairing code: ${code}`);
+        console.log(`\nOn a machine that already has your notes, run:`);
+        console.log(`  vortex-notes agent approve ${code} --space <name> --relay ${relay}`);
+        console.log(`\nWaiting for approval (15 min)…`);
+        const r = await complete();
+        console.log(`\nPaired as "${r.name}". Vault: ${r.vault}`);
+        console.log(`MCP for any harness: { "command": "vortex-notes", "args": ["mcp", "--vault", "${r.vault}"] }`);
+      } else if (sub === "approve") {
+        const code = args.positional[1];
+        const relay = args.flags.get("relay") as string;
+        const spacesArg = args.flags.get("space") as string;
+        if (!code || !relay || !spacesArg) fail("Usage: vortex-notes agent approve <code> --space <name|id>[,<more>] --relay <url> [--read-only]");
+        const mode = args.flags.has("read-only") ? ("ro" as const) : ("rw" as const);
+        const record = await approvePairing(code.toUpperCase(), spacesArg.split(","), mode, relay);
+        console.log(`Approved "${record.name}" (${mode === "ro" ? "read-only" : "read+write"}) for spaces: ${record.spaces.join(", ")}.`);
+        console.log(`The agent's machine will finish setup by itself within a couple of seconds.`);
       } else if (sub === "list") {
         const agents = listAgents();
         if (!agents.length) {

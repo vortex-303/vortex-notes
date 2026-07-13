@@ -95,8 +95,8 @@ export function verifyDeviceCert(
  */
 export function certifyAgent(
   deviceSign: SignKeypair,
-  agentSign: SignKeypair,
-  agentBox: BoxKeypair,
+  agentSignPub: Uint8Array,
+  agentEncPub: Uint8Array,
   name: string,
   spaces: string[],
   mode: "ro" | "rw"
@@ -104,8 +104,8 @@ export function certifyAgent(
   const payload: DeviceCertPayload = {
     v: 1,
     kind: "agent",
-    signPub: toHex(agentSign.pub),
-    encPub: toHex(agentBox.pub),
+    signPub: toHex(agentSignPub),
+    encPub: toHex(agentEncPub),
     name,
     createdAt: new Date().toISOString(),
     spaces,
