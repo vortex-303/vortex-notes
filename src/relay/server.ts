@@ -387,11 +387,14 @@ function appShell(_nonce: string): string {
   article input[type=checkbox] { accent-color:var(--accent); }
   pre.rawview { font:0.82rem/1.6 var(--mono); white-space:pre-wrap; word-break:break-word; }
 
-  #cm { border:1px solid var(--line); border-radius:8px; background:var(--surface); overflow:hidden; }
-  #cm .cm-editor { min-height:60vh; }
-  #cm .cm-gutters { background:var(--surface); border-right:1px solid var(--line); color:var(--ink-faint); }
-  #cm .cm-activeLine, #cm .cm-activeLineGutter { background:var(--accent-soft); }
-  #cm .cm-cursor { border-left-color:var(--accent); }
+  /* Live editor: invisible chrome — the note is the editing surface */
+  #cm { border:none; background:transparent; }
+  #cm .cm-editor { min-height:55vh; }
+  .cm-bullet { color:var(--accent); display:inline-block; width:1em; }
+  .cm-wikilink { color:var(--accent); border-bottom:1px solid var(--accent); cursor:pointer; }
+  .cm-frontmatter { font:0.7rem var(--mono); color:var(--ink-faint); letter-spacing:0.05em;
+    padding:0.25rem 0 0.6rem; cursor:pointer; user-select:none; }
+  .cm-frontmatter:hover { color:var(--accent); }
   .editnote { font:0.72rem var(--mono); color:var(--ink-faint); margin-top:0.5rem; }
 
   @media (max-width:720px) {

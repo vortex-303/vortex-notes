@@ -7,7 +7,8 @@
  * updates through the relay (CRDT merge replaces LWW in 1e part 2).
  */
 import { marked } from "marked";
-import { EditorView, basicSetup } from "codemirror";
+import { EditorView, minimalSetup } from "codemirror";
+import { livePreview } from "./livemd.js";
 import { keymap, ViewUpdate } from "@codemirror/view";
 import { markdown } from "@codemirror/lang-markdown";
 import { accountFromPhrase, generatePhrase, certifyDevice, type PrincipalIdentity } from "../account.js";
@@ -220,56 +221,26 @@ async function flushSave(path: string): Promise<void> {
   }
 }
 
-function openNote(path: string): void {
-  const n = notes.get(path);
-  if (!n) return;
-  void closeEditor();
-  current = path;
-  const { body } = splitFrontmatter(n.content);
-  $("#note").innerHTML =
+function noteHead(n: DocPayload, buttons: string): string {
+  return (
     `<div class="notehead"><div class="meta">` +
     `<button class="mbtn backbtn" id="backBtn">‹ notes</button>` +
     `<span class="path">${esc(n.path)}</span><span id="savestate"></span>` +
-    `<button class="mbtn" id="editBtn">edit</button>` +
-    `<button class="mbtn danger" id="delBtn">delete</button></div>` +
-    `<h1>${esc(noteTitle(n))}</h1></div>` +
-    `<article id="article" title="Tap to edit">${marked.parse(body, { async: false }) as string}</article>`;
-  $("#backBtn").addEventListener("click", () => setMobileNoteOpen(false));
-  $("#editBtn").addEventListener("click", () => openEditor(path));
-  $("#delBtn").addEventListener("click", () => {
-    if (!confirm(`Delete ${path} everywhere?`)) return;
-    void deleteNote(path)
-      .then(() => {
-        current = null;
-        $("#note").innerHTML = '<div class="placeholder">Deleted.</div>';
-        setMobileNoteOpen(false);
-        renderList();
-      })
-      .catch((e) => alert((e as Error).message));
-  });
-  // The text IS the editor: tapping the note body starts editing (links still work).
-  $("#article").addEventListener("click", (e) => {
-    if ((e.target as HTMLElement).closest("a, input")) return;
-    openEditor(path);
-  });
-  setMobileNoteOpen(true);
-  renderList(($("#filter") as HTMLInputElement).value.trim().toLowerCase());
-  $("#pane").scrollTop = 0;
+    buttons +
+    `</div><h1>${esc(noteTitle(n))}</h1></div>`
+  );
 }
 
-function openEditor(path: string): void {
+/** Default view: the live editor — the note IS the editing surface. */
+function openNote(path: string): void {
   const n = notes.get(path);
   if (!n) return;
   void closeEditor();
   current = path;
   lastSaved = n.content;
   $("#note").innerHTML =
-    `<div class="notehead"><div class="meta">` +
-    `<button class="mbtn backbtn" id="backBtn">‹ notes</button>` +
-    `<span class="path">${esc(n.path)}</span><span id="savestate"></span>` +
-    `<button class="mbtn primary" id="doneBtn">done</button></div>` +
-    `<h1>${esc(noteTitle(n))}</h1></div><div id="cm"></div>` +
-    `<div class="editnote">autosaves as you type · tap done to read</div>`;
+    noteHead(n, `<button class="mbtn" id="readBtn">read</button><button class="mbtn danger" id="delBtn">delete</button>`) +
+    `<div id="cm"></div>`;
   const scheduleSave = () => {
     saveState = "dirty";
     setSaveState("·");
@@ -280,33 +251,62 @@ function openEditor(path: string): void {
     doc: n.content,
     parent: $("#cm"),
     extensions: [
-      basicSetup,
+      minimalSetup,
       markdown(),
       EditorView.lineWrapping,
+      ...livePreview,
       keymap.of([{ key: "Mod-s", run: () => (void flushSave(path), true) }]),
       EditorView.updateListener.of((u: ViewUpdate) => {
         if (u.docChanged) scheduleSave();
       }),
       EditorView.domEventHandlers({ blur: () => void flushSave(path) }),
-      EditorView.theme({
-        "&": { fontSize: "1rem" },
-        ".cm-content": { fontFamily: "var(--mono)", padding: "1rem 0.5rem" },
-        "&.cm-focused": { outline: "none" },
-      }),
     ],
   });
-  const done = async () => {
-    await closeEditor();
+  $("#readBtn").addEventListener("click", () => void closeEditor().then(() => openReader(path)));
+  wireCommonNoteButtons(path);
+  setMobileNoteOpen(true);
+  renderList(($("#filter") as HTMLInputElement).value.trim().toLowerCase());
+  $("#pane").scrollTop = 0;
+}
+
+/** Reading view: fully rendered markdown; tap the text to go back to live editing. */
+function openReader(path: string): void {
+  const n = notes.get(path);
+  if (!n) return;
+  void closeEditor();
+  current = path;
+  const { body } = splitFrontmatter(n.content);
+  $("#note").innerHTML =
+    noteHead(n, `<button class="mbtn primary" id="liveBtn">edit</button><button class="mbtn danger" id="delBtn">delete</button>`) +
+    `<article id="article" title="Tap to edit">${marked.parse(body, { async: false }) as string}</article>`;
+  $("#liveBtn").addEventListener("click", () => openNote(path));
+  $("#article").addEventListener("click", (e) => {
+    if ((e.target as HTMLElement).closest("a, input")) return;
     openNote(path);
-  };
-  $("#doneBtn").addEventListener("click", () => void done());
+  });
+  wireCommonNoteButtons(path);
+  setMobileNoteOpen(true);
+  renderList(($("#filter") as HTMLInputElement).value.trim().toLowerCase());
+  $("#pane").scrollTop = 0;
+}
+
+function wireCommonNoteButtons(path: string): void {
   $("#backBtn").addEventListener("click", () => {
     void closeEditor();
     setMobileNoteOpen(false);
-    openNote(path);
-    setMobileNoteOpen(false);
   });
-  editor.focus();
+  $("#delBtn").addEventListener("click", () => {
+    if (!confirm(`Delete ${path} everywhere?`)) return;
+    void closeEditor();
+    void deleteNote(path)
+      .then(() => {
+        current = null;
+        $("#note").innerHTML = '<div class="placeholder">Deleted.</div>';
+        setMobileNoteOpen(false);
+        renderList();
+      })
+      .catch((e) => alert((e as Error).message));
+  });
 }
 
 /** Flush any pending edit, then tear the editor down. */
@@ -362,7 +362,7 @@ function newNote(): void {
   void pushNote(path, content)
     .then(() => {
       renderList();
-      openEditor(path);
+      openNote(path);
     })
     .catch((e) => alert((e as Error).message));
 }
