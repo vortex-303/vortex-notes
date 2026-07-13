@@ -42,9 +42,10 @@ Happy to answer questions on the search quality tradeoffs (RRF keyword-leg
 pollution was the interesting bug) or the E2EE + agents design.
 
 ## Launch checklist
-- [ ] GitHub repo public (vortex-303/vortex-notes), README polished, LICENSE, topics set
-- [ ] npm publish (check name availability: `npm view vortex-notes`)
-- [ ] Demo GIF in README (asciinema → agif: init → claude mcp add → agent writes a note → search in Spanish)
-- [ ] OpenClaw skill/plugin (verify current format at docs.openclaw.ai before writing)
-- [ ] Submit Tue–Thu ~14:00 UTC; be online for the first 2h of comments
+- [x] GitHub repo created (vortex-303/vortex-notes, PRIVATE — flip to public at launch, set topics: mcp, agent-memory, notes, e2ee, markdown)
+- [x] OpenClaw skill written (launch/openclaw-skill/vortex-notes/SKILL.md, verified against docs.openclaw.ai AgentSkills format) — submit to their skills registry at launch
+- [ ] npm publish (name `vortex-notes` confirmed free) — NEEDS USER (npm account/login)
+- [ ] Demo GIF in README (asciinema → agg: init → claude mcp add → agent writes a note → search in Spanish) — NEEDS USER or screen-record session
+- [ ] Flip repo public + submit HN Tue–Thu ~14:00 UTC; be online for the first 2h of comments
 - [ ] Post to r/ClaudeAI, OpenClaw Discord, MCP directories (mcp.directory, mcpservers.org) after HN
+- [ ] Update README before launch: mention E2EE sync + web app now exist (free self-host relay + vortex-relay.fly.dev is ours, not public infra)
