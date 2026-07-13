@@ -81,6 +81,59 @@ test("sync: link → push → join → pull → bidirectional edits", async () =
   }
 });
 
+test("sync: deletions propagate as tombstones; an edit beats a delete; join drops pristine Welcome", async () => {
+  const relay = await startRelay({ port: 0 });
+  const base = `http://127.0.0.1:${relay.port}`;
+  const mac = newHome();
+  const laptop = newHome();
+  try {
+    const v1 = freshVault();
+    const v2 = new Vault(fs.mkdtempSync(path.join(os.tmpdir(), "vortex-sync-vault-")));
+    v2.init(); // keeps its auto-Welcome — join should drop it without a conflict
+
+    const phrase = await as(mac, async () => {
+      const { phrase } = initIdentity("mac");
+      v1.writeNote("keep.md", "Keep", "stays");
+      v1.writeNote("gone.md", "Gone", "will be deleted");
+      v1.writeNote("contested.md", "Contested", "base");
+      await linkVault(v1, base, "personal");
+      await syncVault(v1);
+      return phrase;
+    });
+
+    await as(laptop, async () => {
+      loginIdentity(phrase, "laptop");
+      await joinVault(v2, base, phrase);
+      const r = await syncVault(v2);
+      assert.equal(r.conflicts.length, 0, "pristine Welcome must not conflict on join");
+      assert.equal(fs.existsSync(v2.abs("gone.md")), true);
+    });
+
+    // mac deletes one note; laptop edits another that mac also deletes
+    await as(mac, async () => {
+      fs.rmSync(v1.abs("gone.md"));
+      fs.rmSync(v1.abs("contested.md"));
+      const r = await syncVault(v1);
+      assert.equal(r.pushed, 2); // two tombstones
+    });
+    await as(laptop, async () => {
+      v2.updateNote("contested.md", "edited on laptop — must survive");
+      const r = await syncVault(v2);
+      assert.equal(fs.existsSync(v2.abs("gone.md")), false, "tombstone deletes the untouched note");
+      assert.equal(fs.existsSync(v2.abs("contested.md")), true, "edit beats delete");
+      assert.ok(r.pushed >= 1, "surviving edit is republished");
+    });
+    // mac pulls: contested.md resurrects with the laptop edit; gone.md stays gone
+    await as(mac, async () => {
+      await syncVault(v1);
+      assert.equal(fs.existsSync(v1.abs("gone.md")), false);
+      assert.match(fs.readFileSync(v1.abs("contested.md"), "utf8"), /edited on laptop/);
+    });
+  } finally {
+    await relay.close();
+  }
+});
+
 test("browser edit loop: an ephemeral browser device pushes; daemon sync writes the file", async () => {
   const relay = await startRelay({ port: 0 });
   const base = `http://127.0.0.1:${relay.port}`;

@@ -35,6 +35,8 @@ interface DocPayload {
   path: string;
   content: string;
   mtimeMs: number;
+  /** Tombstone: the note was deleted on the authoring device. */
+  deleted?: boolean;
 }
 
 const statePath = (vault: Vault) => path.join(vault.metaDir, "sync.json");
@@ -99,6 +101,10 @@ export async function joinVault(
 
   // Adopt locally: same record shape as createSpace, key re-sealed to this device.
   adoptSpace(identity, chosen.id, chosen.createdAt, spaceKey, chosen.sealedKeys);
+
+  // A fresh vault's auto-generated Welcome note would false-conflict with the
+  // remote one (different ids/timestamps) — drop it if untouched.
+  if (vault.isPristineWelcome()) fs.rmSync(vault.abs("Welcome.md"), { force: true });
 
   const state: SyncState = { v: 1, relay: relayUrl, spaceId: chosen.id, cursor: 0, files: {} };
   saveSyncState(vault, state);
@@ -177,6 +183,26 @@ export async function syncVault(vault: Vault): Promise<SyncResult> {
     const rel = payload.path;
     if (!vault.isNotePath(rel)) continue;
     const abs = vault.abs(rel);
+
+    if (payload.deleted) {
+      if (fs.existsSync(abs)) {
+        const localContent = fs.readFileSync(abs, "utf8");
+        const locallyModified = state.files[rel] !== undefined && hashOf(localContent) !== state.files[rel];
+        if (locallyModified) {
+          // An edit beats a delete: keep the local version; clearing the hash
+          // makes the push phase republish it, resurrecting the note for everyone.
+          delete state.files[rel];
+          deleteBase(vault, rel);
+          continue;
+        }
+        fs.rmSync(abs);
+        result.pulled++;
+      }
+      delete state.files[rel];
+      deleteBase(vault, rel);
+      continue;
+    }
+
     const localExists = fs.existsSync(abs);
     const localContent = localExists ? fs.readFileSync(abs, "utf8") : null;
     const localHash = localContent === null ? null : hashOf(localContent);
@@ -239,6 +265,19 @@ export async function syncVault(vault: Vault): Promise<SyncResult> {
     result.pushed++;
   }
 
+  // ---- push deletions: tracked files that vanished from disk ----
+  const onDisk = new Set(vault.listNoteFiles());
+  for (const rel of Object.keys(state.files)) {
+    if (onDisk.has(rel)) continue;
+    const payload: DocPayload = { v: 1, path: rel, content: "", mtimeMs: Date.now(), deleted: true };
+    const blob = encryptPayload(key, utf8(JSON.stringify(payload)), `vortex-doc-v1:${rel}`);
+    const seq = await client.pushUpdate(state.spaceId, rel, blob);
+    state.cursor = Math.max(state.cursor, seq);
+    delete state.files[rel];
+    deleteBase(vault, rel);
+    result.pushed++;
+  }
+
   saveSyncState(vault, state);
   return result;
 }
@@ -260,6 +299,10 @@ function readBase(vault: Vault, rel: string): string | null {
 function writeBase(vault: Vault, rel: string, content: string): void {
   fs.mkdirSync(baseDir(vault), { recursive: true });
   fs.writeFileSync(basePath(vault, rel), content);
+}
+
+function deleteBase(vault: Vault, rel: string): void {
+  fs.rmSync(basePath(vault, rel), { force: true });
 }
 
 /** Line-based diff3. Returns merged text, or null when hunks genuinely overlap. */

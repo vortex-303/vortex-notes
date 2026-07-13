@@ -201,6 +201,15 @@ export class Vault {
     return { rel, id, superseded };
   }
 
+  /** True if Welcome.md is still the untouched auto-generated starter note. */
+  isPristineWelcome(): boolean {
+    try {
+      return this.readNote("Welcome.md").body.trim() === WELCOME_BODY.trim();
+    } catch {
+      return false;
+    }
+  }
+
   appendDaily(content: string, date?: string): string {
     const rel = this.dailyPath(date);
     const abs = this.abs(rel);

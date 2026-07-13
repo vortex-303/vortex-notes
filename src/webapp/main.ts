@@ -31,6 +31,7 @@ interface DocPayload {
   path: string;
   content: string;
   mtimeMs: number;
+  deleted?: boolean;
 }
 
 const $ = (sel: string) => document.querySelector(sel) as HTMLElement;
@@ -114,6 +115,15 @@ async function refresh(): Promise<void> {
       const payload = JSON.parse(
         new TextDecoder().decode(decryptPayload(spaceKey, u.blob, `vortex-doc-v1:${u.doc}`))
       ) as DocPayload;
+      if (payload.deleted) {
+        notes.delete(payload.path);
+        if (payload.path === current && !editor) {
+          current = null;
+          $("#note").innerHTML = '<div class="placeholder">That note was deleted on another device.</div>';
+          setMobileNoteOpen(false);
+        }
+        continue;
+      }
       notes.set(payload.path, payload);
       if (payload.path === current) changedCurrent = true;
     } catch {
@@ -200,11 +210,23 @@ function openNote(path: string): void {
     `<div class="notehead"><div class="meta">` +
     `<button class="mbtn backbtn" id="backBtn">‹ notes</button>` +
     `<span class="path">${esc(n.path)}</span><span id="savestate"></span>` +
-    `<button class="mbtn" id="editBtn">edit</button></div>` +
+    `<button class="mbtn" id="editBtn">edit</button>` +
+    `<button class="mbtn danger" id="delBtn">delete</button></div>` +
     `<h1>${esc(noteTitle(n))}</h1></div>` +
     `<article id="article" title="Tap to edit">${marked.parse(body, { async: false }) as string}</article>`;
   $("#backBtn").addEventListener("click", () => setMobileNoteOpen(false));
   $("#editBtn").addEventListener("click", () => openEditor(path));
+  $("#delBtn").addEventListener("click", () => {
+    if (!confirm(`Delete ${path} everywhere?`)) return;
+    void deleteNote(path)
+      .then(() => {
+        current = null;
+        $("#note").innerHTML = '<div class="placeholder">Deleted.</div>';
+        setMobileNoteOpen(false);
+        renderList();
+      })
+      .catch((e) => alert((e as Error).message));
+  });
   // The text IS the editor: tapping the note body starts editing (links still work).
   $("#article").addEventListener("click", (e) => {
     if ((e.target as HTMLElement).closest("a, input")) return;
@@ -287,6 +309,15 @@ async function closeEditor(): Promise<void> {
     editor?.destroy();
     editor = null;
   }
+}
+
+async function deleteNote(path: string): Promise<void> {
+  if (!client || !spaceKey || !spaceId) throw new Error("Locked.");
+  const payload: DocPayload = { v: 1, path, content: "", mtimeMs: Date.now(), deleted: true };
+  const blob = encryptPayload(spaceKey, utf8(JSON.stringify(payload)), `vortex-doc-v1:${path}`);
+  const seq = await client.pushUpdate(spaceId, path, blob);
+  cursor = Math.max(cursor, seq);
+  notes.delete(path);
 }
 
 // ---------- actions ----------

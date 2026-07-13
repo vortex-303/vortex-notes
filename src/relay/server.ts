@@ -347,6 +347,7 @@ function appShell(_nonce: string): string {
   .mbtn { background:none; border:1px solid var(--line); border-radius:6px; color:var(--ink-soft);
     font:0.68rem var(--mono); padding:0.2rem 0.55rem; cursor:pointer; }
   .mbtn:hover { border-color:var(--accent); color:var(--accent); }
+  .mbtn.danger:hover { border-color:var(--danger); color:var(--danger); }
   .mbtn.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
   [data-theme="dark"] .mbtn.primary { color:#10211C; }
 
