@@ -10,8 +10,11 @@ import { marked } from "marked";
 import { EditorView, basicSetup } from "codemirror";
 import { keymap, ViewUpdate } from "@codemirror/view";
 import { markdown } from "@codemirror/lang-markdown";
-import { accountFromPhrase, certifyDevice, type PrincipalIdentity } from "../account.js";
+import { accountFromPhrase, generatePhrase, certifyDevice, type PrincipalIdentity } from "../account.js";
+import { ulid } from "ulid";
 import {
+  randomKey,
+  sealBox,
   randomSignKeypair,
   randomBoxKeypair,
   signKeypairFromSeed,
@@ -82,7 +85,7 @@ function browserIdentity(phrase: string): PrincipalIdentity {
   };
 }
 
-async function unlock(phrase: string): Promise<void> {
+async function unlock(phrase: string, opts: { createSpaceIfEmpty?: boolean } = {}): Promise<void> {
   const status = $("#status");
   status.textContent = "Deriving keys…";
   const account = accountFromPhrase(phrase);
@@ -92,8 +95,25 @@ async function unlock(phrase: string): Promise<void> {
   await client.register();
   status.textContent = "Fetching spaces…";
   const spaces = await client.listSpaces();
-  if (!spaces.length) throw new Error("No spaces synced to this relay yet. Run 'vortex-notes sync link' on a machine first.");
-  const chosen = spaces[0];
+  let chosen = spaces[0];
+  if (!chosen) {
+    if (!opts.createSpaceIfEmpty) {
+      throw new Error("No spaces for this account yet — create an account below, or run 'vortex-notes sync link' on a machine.");
+    }
+    status.textContent = "Creating your encrypted space…";
+    const key = randomKey();
+    const record = {
+      id: "sp-" + ulid().toLowerCase(),
+      name: "personal",
+      createdAt: new Date().toISOString(),
+      sealedKeys: {
+        [identity.file.device.signPub]: toHex(sealBox(key, identity.deviceBox.pub)),
+        [identity.file.accountSignPub]: toHex(sealBox(key, account.box.pub)),
+      },
+    };
+    await client.createSpace(record);
+    chosen = { id: record.id, sealedKeys: record.sealedKeys, createdAt: record.createdAt };
+  }
   const sealed = chosen.sealedKeys[identity.file.accountSignPub];
   if (!sealed) throw new Error("This space has no key sealed to your account.");
   spaceKey = openBox(fromHex(sealed), account.box);
@@ -368,6 +388,36 @@ function appendDaily(text: string): void {
 $("#unlockBtn").addEventListener("click", () => {
   const phrase = ($("#phrase") as HTMLInputElement).value;
   unlock(phrase).catch((e) => {
+    $("#status").textContent = (e as Error).message;
+  });
+});
+
+// --- create account: phrase generated in this tab, shown once ---
+let freshPhrase = "";
+$("#showCreateBtn").addEventListener("click", () => {
+  freshPhrase = generatePhrase();
+  $("#newPhrase").textContent = freshPhrase;
+  ($("#savedCheck") as HTMLInputElement).checked = false;
+  ($("#createBtn") as HTMLButtonElement).disabled = true;
+  $("#unlockView").hidden = true;
+  $("#createView").hidden = false;
+});
+$("#backToUnlockBtn").addEventListener("click", () => {
+  freshPhrase = "";
+  $("#newPhrase").textContent = "";
+  $("#createView").hidden = true;
+  $("#unlockView").hidden = false;
+});
+$("#copyPhraseBtn").addEventListener("click", () => {
+  void navigator.clipboard.writeText(freshPhrase).then(() => {
+    $("#copyPhraseBtn").textContent = "copied — clear your clipboard after saving it";
+  });
+});
+$("#savedCheck").addEventListener("change", (e) => {
+  ($("#createBtn") as HTMLButtonElement).disabled = !(e.target as HTMLInputElement).checked;
+});
+$("#createBtn").addEventListener("click", () => {
+  unlock(freshPhrase, { createSpaceIfEmpty: true }).catch((e) => {
     $("#status").textContent = (e as Error).message;
   });
 });

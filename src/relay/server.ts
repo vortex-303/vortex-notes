@@ -301,6 +301,19 @@ function appShell(_nonce: string): string {
     font:600 0.85rem var(--sans); cursor:pointer; }
   [data-theme="dark"] #unlockBtn { color:#10211C; }
   #status { font:0.75rem var(--mono); color:var(--ink-faint); min-height:1.2em; max-width:30rem; text-align:center; }
+  #unlockView, #createView { display:flex; flex-direction:column; align-items:center; gap:1.1rem; }
+  #createView[hidden], #unlockView[hidden] { display:none; }
+  .linkbtn { background:none; border:none; color:var(--accent); font:0.8rem var(--sans);
+    cursor:pointer; text-decoration:underline; text-underline-offset:3px; padding:0.4rem; }
+  .phrasebox { max-width:min(30rem,90vw); background:var(--surface); border:1px solid var(--accent);
+    border-radius:10px; padding:1rem 1.2rem; font:600 1rem/1.9 var(--mono); color:var(--ink);
+    text-align:center; user-select:all; -webkit-user-select:all; }
+  .confirmrow { display:flex; gap:0.6rem; align-items:center; font-size:0.85rem; color:var(--ink-soft); cursor:pointer; }
+  .confirmrow input { width:20px; height:20px; accent-color:var(--accent); }
+  #createBtn { background:var(--accent); color:#fff; border:none; border-radius:8px; padding:0.6rem 1.5rem;
+    font:600 0.85rem var(--sans); cursor:pointer; }
+  #createBtn:disabled { opacity:0.45; cursor:default; }
+  [data-theme="dark"] #createBtn { color:#10211C; }
 
   #main { display:none; height:100vh; }
   aside { width:290px; flex:none; background:var(--surface); border-right:1px solid var(--line);
@@ -415,9 +428,20 @@ function appShell(_nonce: string): string {
 <body>
 <div id="lock">
   <div class="wordmark">${MARK_SVG}<span class="vx">Vortex</span> <span class="nx">Notes</span></div>
-  <p>Enter your recovery phrase. Keys are derived in this tab — the phrase never leaves your browser, and this server only stores ciphertext.</p>
-  <input id="phrase" type="password" placeholder="twelve words separated by spaces" autocomplete="off">
-  <button id="unlockBtn">Unlock</button>
+  <div id="unlockView">
+    <p>Enter your recovery phrase. Keys are derived in this tab — the phrase never leaves your browser, and this server only stores ciphertext.</p>
+    <input id="phrase" type="password" placeholder="twelve words separated by spaces" autocomplete="off">
+    <button id="unlockBtn">Unlock</button>
+    <button class="linkbtn" id="showCreateBtn">New here? Create an account</button>
+  </div>
+  <div id="createView" hidden>
+    <p><strong>This is your account.</strong> Twelve words, generated in this tab, never stored anywhere. Write them down — anyone with them can read your notes, and there is no reset if they're lost.</p>
+    <div id="newPhrase" class="phrasebox"></div>
+    <button class="linkbtn" id="copyPhraseBtn">copy to clipboard</button>
+    <label class="confirmrow"><input type="checkbox" id="savedCheck"> I wrote my phrase down somewhere safe</label>
+    <button id="createBtn" disabled>Create my notes</button>
+    <button class="linkbtn" id="backToUnlockBtn">I already have a phrase</button>
+  </div>
   <div id="status"></div>
 </div>
 <div id="main">

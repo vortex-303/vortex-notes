@@ -111,6 +111,70 @@ test("browser-style unlock: ephemeral device from phrase alone (no filesystem) c
   }
 });
 
+test("web-first onboarding: account + space created browser-style, CLI machine joins and pulls", async () => {
+  const relay = await startRelay({ port: 0 });
+  const base = `http://127.0.0.1:${relay.port}`;
+  try {
+    // "browser": everything from a generated phrase, zero filesystem
+    const { generatePhrase, accountFromPhrase: fromPhrase, certifyDevice } = await import("../src/account.js");
+    const { randomKey, sealBox, randomSignKeypair: rSign, randomBoxKeypair: rBox, toHex: hex } = await import("../src/crypto.js");
+    const { ulid } = await import("ulid");
+    const phrase = generatePhrase();
+    const account = fromPhrase(phrase);
+    const dSign = rSign();
+    const dBox = rBox();
+    const browser = {
+      file: {
+        accountSignPub: hex(account.sign.pub),
+        accountEncPub: hex(account.box.pub),
+        device: certifyDevice(account, dSign, dBox, "browser@onboarding"),
+      },
+      deviceSign: dSign,
+      deviceBox: dBox,
+    };
+    const cB = new RelayClient(base, browser);
+    await cB.register();
+    const key = randomKey();
+    const record = {
+      id: "sp-" + ulid().toLowerCase(),
+      name: "personal",
+      createdAt: new Date().toISOString(),
+      sealedKeys: {
+        [browser.file.device.signPub]: hex(sealBox(key, dBox.pub)),
+        [browser.file.accountSignPub]: hex(sealBox(key, account.box.pub)),
+      },
+    };
+    await cB.createSpace(record);
+    await cB.pushUpdate(
+      record.id,
+      "first.md",
+      (await import("../src/crypto.js")).encryptPayload(
+        key,
+        (await import("../src/crypto.js")).utf8(
+          JSON.stringify({ v: 1, path: "first.md", content: "# Born on the web\nhello", mtimeMs: Date.now() })
+        ),
+        "vortex-doc-v1:first.md"
+      )
+    );
+
+    // CLI machine: login with the phrase, join, sync — note materializes
+    freshHome();
+    const { loginIdentity: login } = await import("../src/identity.js");
+    const { joinVault, syncVault } = await import("../src/sync.js");
+    const { Vault } = await import("../src/vault.js");
+    const fsm = await import("node:fs");
+    login(phrase, "cli-machine");
+    const vault = new Vault(fsm.default.mkdtempSync(path.join(os.tmpdir(), "vortex-web-first-")));
+    vault.init();
+    await joinVault(vault, base, phrase);
+    const r = await syncVault(vault);
+    assert.ok(r.pulled >= 1);
+    assert.match(fsm.default.readFileSync(vault.abs("first.md"), "utf8"), /Born on the web/);
+  } finally {
+    await relay.close();
+  }
+});
+
 test("relay auth: unregistered devices, bad signatures, foreign spaces are rejected", async () => {
   const relay = await startRelay({ port: 0 });
   const base = `http://127.0.0.1:${relay.port}`;
