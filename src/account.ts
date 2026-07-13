@@ -26,12 +26,20 @@ export interface AccountKeys {
 
 export interface DeviceCertPayload {
   v: 1;
-  kind: "device";
+  kind: "device" | "agent";
   signPub: string;
   encPub: string;
   name: string;
   createdAt: string;
+  /** agent-only: space ids this principal may touch — relay-enforced, signed into the cert */
+  spaces?: string[];
+  /** agent-only: "ro" = search/read only */
+  mode?: "ro" | "rw";
+  /** agent-only: signPub of the certifying device (chain: account → device → agent) */
+  signedBy?: string;
 }
+
+export type SignedCert = DeviceCertPayload & { certSig: string };
 
 export function generatePhrase(): string {
   return generateMnemonic(wordlist, 128); // 12 words
@@ -73,11 +81,53 @@ export function certifyDevice(
 }
 
 export function verifyDeviceCert(
-  accountSignPub: Uint8Array,
+  signerPub: Uint8Array,
   device: DeviceCertPayload & { certSig: string }
 ): boolean {
   const { certSig, ...payload } = device;
-  return verify(fromHex(certSig), canonical(payload as unknown as Record<string, unknown>), accountSignPub);
+  return verify(fromHex(certSig), canonical(payload as unknown as Record<string, unknown>), signerPub);
+}
+
+/**
+ * Certify an agent with a DEVICE key (no phrase needed — the chain is
+ * account → device → agent). Scope and mode are inside the signature, so
+ * the relay can enforce them without trusting the agent.
+ */
+export function certifyAgent(
+  deviceSign: SignKeypair,
+  agentSign: SignKeypair,
+  agentBox: BoxKeypair,
+  name: string,
+  spaces: string[],
+  mode: "ro" | "rw"
+): SignedCert {
+  const payload: DeviceCertPayload = {
+    v: 1,
+    kind: "agent",
+    signPub: toHex(agentSign.pub),
+    encPub: toHex(agentBox.pub),
+    name,
+    createdAt: new Date().toISOString(),
+    spaces,
+    mode,
+    signedBy: toHex(deviceSign.pub),
+  };
+  const certSig = toHex(sign(canonical(payload as unknown as Record<string, unknown>), deviceSign.priv));
+  return { ...payload, certSig };
+}
+
+/** Verify the full agent chain: device cert under the account, agent cert under the device. */
+export function verifyAgentChain(
+  accountSignPub: Uint8Array,
+  agentCert: SignedCert,
+  deviceCert: SignedCert
+): boolean {
+  if (agentCert.kind !== "agent" || deviceCert.kind !== "device") return false;
+  if (agentCert.signedBy !== deviceCert.signPub) return false;
+  return (
+    verifyDeviceCert(accountSignPub, deviceCert) &&
+    verifyDeviceCert(fromHex(deviceCert.signPub), agentCert)
+  );
 }
 
 /**
@@ -89,6 +139,8 @@ export interface PrincipalIdentity {
     accountSignPub: string;
     accountEncPub: string;
     device: DeviceCertPayload & { certSig: string };
+    /** agents only: the certifying device's cert (account → device → agent) */
+    chain?: SignedCert;
   };
   deviceSign: SignKeypair;
   deviceBox: BoxKeypair;

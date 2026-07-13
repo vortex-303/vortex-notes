@@ -111,7 +111,7 @@ export async function joinVault(
   return state;
 }
 
-function adoptSpace(
+export function adoptSpace(
   identity: LoadedIdentity,
   id: string,
   createdAt: string,

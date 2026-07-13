@@ -21,7 +21,7 @@ import { fileURLToPath } from "node:url";
 import Database from "better-sqlite3";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { verify, fromHex, toHex, utf8 } from "../crypto.js";
-import { verifyDeviceCert, type DeviceCertPayload } from "../identity.js";
+import { verifyDeviceCert, verifyAgentChain, type DeviceCertPayload, type SignedCert } from "../account.js";
 
 const MAX_BODY = 8 * 1024 * 1024;
 const MAX_SKEW_MS = 5 * 60 * 1000;
@@ -125,7 +125,12 @@ export async function startRelay(
       if (!accountSignPub || !accountEncPub || !device) {
         return sendJson(res, 400, { error: "accountSignPub, accountEncPub, device required" });
       }
-      if (!verifyDeviceCert(fromHex(accountSignPub), device)) {
+      if (device.kind === "agent") {
+        const chain = b.chain as SignedCert | undefined;
+        if (!chain || !verifyAgentChain(fromHex(accountSignPub), device, chain)) {
+          return sendJson(res, 401, { error: "Agent certificate chain is invalid" });
+        }
+      } else if (!verifyDeviceCert(fromHex(accountSignPub), device)) {
         return sendJson(res, 401, { error: "Device certificate not signed by that account" });
       }
       db.prepare(
@@ -139,6 +144,30 @@ export async function startRelay(
     const auth = authenticate(req, url, body);
     if ("error" in auth) return sendJson(res, 401, { error: auth.error });
     const { account, devicePub } = auth;
+    const isAgent = auth.cert?.kind === "agent";
+    const scope = isAgent ? auth.cert?.spaces ?? [] : null; // agents: only certified spaces
+    const readOnly = isAgent && auth.cert?.mode === "ro";
+    const inScope = (spaceId: string) => scope === null || scope.includes(spaceId);
+
+    if (route === "GET /v1/principals") {
+      const rows = db.prepare("SELECT signPub, cert, createdAt FROM devices WHERE account=?").all(account) as {
+        signPub: string;
+        cert: string;
+        createdAt: string;
+      }[];
+      return sendJson(res, 200, {
+        principals: rows.map((r) => {
+          const c = JSON.parse(r.cert) as SignedCert;
+          return { signPub: r.signPub, name: c.name, kind: c.kind ?? "device", spaces: c.spaces, mode: c.mode, registeredAt: r.createdAt };
+        }),
+      });
+    }
+    const principalMatch = url.pathname.match(/^\/v1\/principals\/([0-9a-f]+)$/);
+    if (req.method === "DELETE" && principalMatch) {
+      if (isAgent) return sendJson(res, 403, { error: "Agents cannot revoke principals" });
+      const gone = db.prepare("DELETE FROM devices WHERE signPub=? AND account=?").run(principalMatch[1], account);
+      return sendJson(res, gone.changes ? 200 : 404, gone.changes ? { ok: true } : { error: "No such principal" });
+    }
 
     const rawMatch = url.pathname.match(/^\/v1\/spaces\/([a-z0-9-]+)(?:\/docs\/([A-Za-z0-9._%-]+))?$/);
     const spaceMatch = rawMatch
@@ -152,11 +181,14 @@ export async function startRelay(
         createdAt: string;
       }[];
       return sendJson(res, 200, {
-        spaces: rows.map((r) => ({ id: r.id, sealedKeys: JSON.parse(r.sealedKeys), createdAt: r.createdAt })),
+        spaces: rows
+          .filter((r) => inScope(r.id))
+          .map((r) => ({ id: r.id, sealedKeys: JSON.parse(r.sealedKeys), createdAt: r.createdAt })),
       });
     }
 
     if (req.method === "PUT" && spaceMatch && !spaceMatch[2]) {
+      if (isAgent) return sendJson(res, 403, { error: "Agents cannot modify space membership" });
       const id = spaceMatch[1];
       const b = parse(body);
       const sealedKeys = b.sealedKeys as Record<string, string> | undefined;
@@ -175,8 +207,10 @@ export async function startRelay(
       const owner = db.prepare("SELECT account FROM spaces WHERE id=?").get(spaceId) as { account: string } | undefined;
       if (!owner) return sendJson(res, 404, { error: `Unknown space ${spaceId}` });
       if (owner.account !== account) return sendJson(res, 403, { error: "Not your space" });
+      if (!inScope(spaceId)) return sendJson(res, 403, { error: "This agent is not granted that space" });
 
       if (req.method === "POST" && spaceMatch[2]) {
+        if (readOnly) return sendJson(res, 403, { error: "This agent is read-only" });
         const b = parse(body);
         const blob = Buffer.from(String(b.blob ?? ""), "base64");
         if (!blob.length) return sendJson(res, 400, { error: "blob (base64) required" });
@@ -207,7 +241,7 @@ export async function startRelay(
     req: http.IncomingMessage,
     url: URL,
     body: Buffer
-  ): { account: string; devicePub: string } | { error: string } {
+  ): { account: string; devicePub: string; cert: SignedCert | null } | { error: string } {
     const devicePub = String(req.headers["x-vortex-device"] ?? "");
     const ts = String(req.headers["x-vortex-ts"] ?? "");
     const sig = String(req.headers["x-vortex-sig"] ?? "");
@@ -221,11 +255,15 @@ export async function startRelay(
       ok = false;
     }
     if (!ok) return { error: "Bad signature" };
-    const row = db.prepare("SELECT account FROM devices WHERE signPub=?").get(devicePub) as
-      | { account: string }
+    const row = db.prepare("SELECT account, cert FROM devices WHERE signPub=?").get(devicePub) as
+      | { account: string; cert: string }
       | undefined;
     if (!row) return { error: "Device not registered" };
-    return { account: row.account, devicePub };
+    let cert: SignedCert | null = null;
+    try {
+      cert = JSON.parse(row.cert) as SignedCert;
+    } catch { /* legacy rows */ }
+    return { account: row.account, devicePub, cert };
   }
 
   await new Promise<void>((resolve) => server.listen(opts.port, resolve));

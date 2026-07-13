@@ -29,6 +29,7 @@ export class RelayClient {
         accountSignPub: this.identity.file.accountSignPub,
         accountEncPub: this.identity.file.accountEncPub,
         device: this.identity.file.device,
+        chain: this.identity.file.chain,
       }),
     });
     await ok(res);
@@ -43,6 +44,17 @@ export class RelayClient {
       spaces: { id: string; sealedKeys: Record<string, string>; createdAt: string }[];
     };
     return data.spaces;
+  }
+
+  async listPrincipals(): Promise<
+    { signPub: string; name: string; kind: string; spaces?: string[]; mode?: string; registeredAt: string }[]
+  > {
+    const res = await ok(await this.signed("GET", "/v1/principals"));
+    return ((await res.json()) as { principals: { signPub: string; name: string; kind: string; spaces?: string[]; mode?: string; registeredAt: string }[] }).principals;
+  }
+
+  async revokePrincipal(signPub: string): Promise<void> {
+    await ok(await this.signed("DELETE", `/v1/principals/${signPub}`));
   }
 
   async pushUpdate(spaceId: string, docId: string, blob: Uint8Array): Promise<number> {

@@ -31,6 +31,7 @@ import {
   canonical,
   certifyDevice,
   verifyDeviceCert,
+  verifyAgentChain as verifyChain,
   type AccountKeys,
   type DeviceCertPayload,
 } from "./account.js";
@@ -51,6 +52,8 @@ export interface IdentityFile {
   accountEncPub: string;
   fingerprint: string;
   device: DeviceCertPayload & { certSig: string };
+  /** agents only: the certifying device's cert */
+  chain?: DeviceCertPayload & { certSig: string };
   createdAt: string;
 }
 
@@ -113,7 +116,12 @@ export function loadIdentity(): LoadedIdentity {
   if (toHex(deviceSign.pub) !== file.device.signPub) {
     throw new Error("device.key does not match identity.json (corrupted state).");
   }
-  if (!verifyDeviceCert(fromHex(file.accountSignPub), file.device)) {
+  if (file.device.kind === "agent") {
+    const { verifyAgentChain } = { verifyAgentChain: verifyChain };
+    if (!file.chain || !verifyAgentChain(fromHex(file.accountSignPub), file.device, file.chain)) {
+      throw new Error("Agent certificate chain is invalid.");
+    }
+  } else if (!verifyDeviceCert(fromHex(file.accountSignPub), file.device)) {
     throw new Error("Device certificate signature is invalid.");
   }
   return { file, deviceSign, deviceBox };

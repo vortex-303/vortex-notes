@@ -25,6 +25,14 @@ Usage:
   vortex-notes space create <name>              Create an encrypted space
   vortex-notes space list                       List spaces on this machine
   vortex-notes relay [--port <n>] [--db <file>] Run a sync relay (self-host; stores ciphertext only)
+
+  vortex-notes agent create <name> --space <name|id>[,<more>] --relay <url> [--read-only]
+                                                Grant an agent scoped access; prints its token ONCE
+  vortex-notes agent connect <token> [--vault <dir>]
+                                                (on the agent's machine) become that agent
+  vortex-notes agent list                       Agents you've created here
+  vortex-notes agent revoke <name> --relay <url>
+                                                Cut an agent off (relay ban + grant removal)
   vortex-notes sync link --relay <url> --space <name> [--vault <dir>]
                                                 Link this vault to a space (first machine)
   vortex-notes sync join --relay <url> [--space <id>] [--vault <dir>]
@@ -202,6 +210,53 @@ async function main(): Promise<void> {
         console.log(`Synced: pulled ${r.pulled}, pushed ${r.pushed}${r.conflicts.length ? `, conflicts: ${r.conflicts.join(", ")}` : ""}.`);
       } else {
         fail("Usage: vortex-notes sync [link|join|status]");
+      }
+      break;
+    }
+    case "agent": {
+      const { createAgent, connectAgent, listAgents, revokeAgent } = await import("./agents.js");
+      const sub = args.positional[0];
+      if (sub === "create") {
+        const name = args.positional[1];
+        const relay = args.flags.get("relay") as string;
+        const spacesArg = args.flags.get("space") as string;
+        if (!name || !relay || !spacesArg) fail("Usage: vortex-notes agent create <name> --space <name|id>[,<more>] --relay <url> [--read-only]");
+        const mode = args.flags.has("read-only") ? ("ro" as const) : ("rw" as const);
+        const { token, record } = await createAgent(name, spacesArg.split(","), mode, relay);
+        console.log(`Agent "${name}" created (${mode === "ro" ? "read-only" : "read+write"}, spaces: ${record.spaces.join(", ")}).`);
+        console.log(`
+Agent token — paste it on the agent's machine. Shown once; treat it like a password:
+`);
+        console.log(token);
+        console.log(`
+On the agent's machine:
+  VORTEX_NOTES_HOME=~/.vortex-agent vortex-notes agent connect '<token>' --vault ~/agent-vault
+  VORTEX_NOTES_HOME=~/.vortex-agent vortex-notes mcp --vault ~/agent-vault`);
+      } else if (sub === "connect") {
+        const token = args.positional[1];
+        if (!token) fail("Usage: vortex-notes agent connect <token> [--vault <dir>]");
+        const r = await connectAgent(token, args.flags.get("vault") as string | undefined);
+        console.log(`Connected as agent "${r.name}" (account ${r.fingerprint}).`);
+        console.log(`Granted spaces: ${r.spaces.join(", ")}`);
+        if (r.vault) console.log(`Vault ready at ${r.vault} — run 'vortex-notes sync --vault ${r.vault}' to pull notes.`);
+      } else if (sub === "list") {
+        const agents = listAgents();
+        if (!agents.length) {
+          console.log("No agents created from this machine yet.");
+          break;
+        }
+        for (const a of agents) {
+          console.log(`${a.revokedAt ? "✗" : "✓"} ${a.name}  ${a.mode}  spaces: ${a.spaces.join(", ")}  key: ${a.signPub.slice(0, 12)}…${a.revokedAt ? `  (revoked ${a.revokedAt.slice(0, 10)})` : ""}`);
+        }
+      } else if (sub === "revoke") {
+        const name = args.positional[1];
+        const relay = args.flags.get("relay") as string;
+        if (!name || !relay) fail("Usage: vortex-notes agent revoke <name> --relay <url>");
+        const r = await revokeAgent(name, relay);
+        console.log(`Agent "${r.name}" revoked: the relay no longer accepts its key, and its space grants were removed.`);
+        console.log(`Note: it may retain previously-downloaded content and the old space key; key rotation on revoke lands next.`);
+      } else {
+        fail("Usage: vortex-notes agent <create|connect|list|revoke>");
       }
       break;
     }

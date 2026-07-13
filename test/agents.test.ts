@@ -1,0 +1,161 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { Vault } from "../src/vault.js";
+import { startRelay } from "../src/relay/server.js";
+import { initIdentity } from "../src/identity.js";
+import { linkVault, syncVault } from "../src/sync.js";
+import { createAgent, connectAgent, listAgents, revokeAgent } from "../src/agents.js";
+import { RelayClient } from "../src/relay/client.js";
+import { loadIdentity } from "../src/identity.js";
+
+process.env.VORTEX_NOTES_NO_SEMANTIC = "1";
+
+function newHome(): string {
+  return fs.mkdtempSync(path.join(os.tmpdir(), "vortex-agent-home-"));
+}
+async function as<T>(home: string, fn: () => Promise<T> | T): Promise<T> {
+  const prev = process.env.VORTEX_NOTES_HOME;
+  process.env.VORTEX_NOTES_HOME = home;
+  try {
+    return await fn();
+  } finally {
+    process.env.VORTEX_NOTES_HOME = prev;
+  }
+}
+function freshVault(): Vault {
+  const vault = new Vault(fs.mkdtempSync(path.join(os.tmpdir(), "vortex-agent-vault-")));
+  vault.init();
+  fs.rmSync(vault.abs("Welcome.md"));
+  return vault;
+}
+
+test("agent lifecycle: create → connect → scoped sync both ways → attribution → revoke", async () => {
+  const relay = await startRelay({ port: 0 });
+  const base = `http://127.0.0.1:${relay.port}`;
+  const owner = newHome();
+  const agentBox = newHome();
+  try {
+    const userVault = freshVault();
+    // owner: identity, two spaces (one granted, one private), notes
+    const token = await as(owner, async () => {
+      initIdentity("owners-mac");
+      userVault.writeNote("brief.md", "Brief", "The agent should read this.");
+      await linkVault(userVault, base, "work");
+      await syncVault(userVault);
+      // second, private space the agent must never see
+      const { createSpace } = await import("../src/spaces.js");
+      const priv = createSpace(loadIdentity(), "private-journal");
+      const client = new RelayClient(base, loadIdentity());
+      await client.createSpace(priv);
+
+      const { token, record } = await createAgent("hermes", ["work"], "rw", base);
+      assert.equal(record.mode, "rw");
+      assert.equal(listAgents().length, 1);
+      return token;
+    });
+
+    // agent machine: one token → identity + vault + notes
+    const agentVaultDir = fs.mkdtempSync(path.join(os.tmpdir(), "vortex-agent-v-"));
+    await as(agentBox, async () => {
+      const r = await connectAgent(token, agentVaultDir);
+      assert.equal(r.name, "hermes");
+      assert.equal(r.spaces.length, 1, "agent sees only the granted space");
+
+      const agentVault = new Vault(agentVaultDir);
+      const pull = await syncVault(agentVault);
+      assert.ok(pull.pulled >= 1);
+      assert.match(fs.readFileSync(agentVault.abs("brief.md"), "utf8"), /agent should read this/);
+
+      // agent writes a note back
+      agentVault.writeNote("report.md", "Report", "Filed by hermes.");
+      await syncVault(agentVault);
+
+      // scoping: the private space is invisible and untouchable
+      const agentIdentity = loadIdentity();
+      const c = new RelayClient(base, agentIdentity);
+      const visible = await c.listSpaces();
+      assert.equal(visible.length, 1);
+      await assert.rejects(c.pushUpdate("sp-fake00000000000000000000", "x", new Uint8Array([1])), /Unknown space|not granted/);
+    });
+
+    // owner pulls: agent's note arrives, and the relay attributes it to the agent's key
+    await as(owner, async () => {
+      await syncVault(userVault);
+      assert.match(fs.readFileSync(userVault.abs("report.md"), "utf8"), /Filed by hermes/);
+      const client = new RelayClient(base, loadIdentity());
+      const principals = await client.listPrincipals();
+      const hermes = principals.find((p) => p.kind === "agent");
+      assert.ok(hermes);
+      assert.equal(hermes!.name, "hermes");
+      const { getSpace } = await import("../src/spaces.js");
+      const updates = await client.pullUpdates(getSpace("work").id);
+      const report = updates.filter((u) => u.doc === "report.md").pop();
+      assert.equal(report!.author, hermes!.signPub, "agent edits are signed by the agent, not the owner");
+
+      // revoke: relay stops accepting the agent entirely
+      await revokeAgent("hermes", base);
+      assert.ok(listAgents()[0].revokedAt);
+    });
+    await as(agentBox, async () => {
+      const c = new RelayClient(base, loadIdentity());
+      await assert.rejects(c.listSpaces(), /not registered/i);
+    });
+  } finally {
+    await relay.close();
+  }
+});
+
+test("read-only agent: relay rejects its writes; forged agent certs are rejected", async () => {
+  const relay = await startRelay({ port: 0 });
+  const base = `http://127.0.0.1:${relay.port}`;
+  const owner = newHome();
+  const agentBox = newHome();
+  try {
+    const v = freshVault();
+    const token = await as(owner, async () => {
+      initIdentity("mac");
+      v.writeNote("data.md", "Data", "read me");
+      await linkVault(v, base, "work");
+      await syncVault(v);
+      return (await createAgent("watcher", ["work"], "ro", base)).token;
+    });
+
+    await as(agentBox, async () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), "vortex-ro-v-"));
+      await connectAgent(token, dir);
+      const vault = new Vault(dir);
+      const r = await syncVault(vault);
+      assert.ok(r.pulled >= 1, "read-only agent can pull");
+      // any push is rejected by the relay
+      vault.writeNote("sneaky.md", "Sneaky", "should not land");
+      await assert.rejects(syncVault(vault), /read-only/i);
+    });
+
+    // forged chain: an agent cert signed by a random key that ISN'T a certified device
+    await as(newHome(), async () => {
+      const { certifyAgent } = await import("../src/account.js");
+      const { randomSignKeypair, randomBoxKeypair, toHex } = await import("../src/crypto.js");
+      const rogueDevice = randomSignKeypair();
+      const aSign = randomSignKeypair();
+      const aBox = randomBoxKeypair();
+      const forged = certifyAgent(rogueDevice, aSign, aBox, "evil", ["work"], "rw");
+      const ownerIdentity = await as(owner, () => loadIdentity());
+      const res = await fetch(`${base}/v1/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          accountSignPub: ownerIdentity.file.accountSignPub,
+          accountEncPub: ownerIdentity.file.accountEncPub,
+          device: forged,
+          chain: { ...ownerIdentity.file.device, signPub: toHex(rogueDevice.pub) }, // tampered chain
+        }),
+      });
+      assert.equal(res.status, 401);
+    });
+  } finally {
+    await relay.close();
+  }
+});
