@@ -432,6 +432,19 @@ $("#list").addEventListener("click", (e) => {
 });
 $("#newBtn").addEventListener("click", newNote);
 const menu = $("#menu");
+const tipsOverlay = $("#tipsOverlay");
+$("#tipsBtn").addEventListener("click", () => {
+  tipsOverlay.hidden = false;
+});
+$("#tipsClose").addEventListener("click", () => {
+  tipsOverlay.hidden = true;
+});
+tipsOverlay.addEventListener("click", (e) => {
+  if (e.target === tipsOverlay) tipsOverlay.hidden = true;
+});
+document.addEventListener("keydown", (e) => {
+  if ((e as KeyboardEvent).key === "Escape" && !tipsOverlay.hidden) tipsOverlay.hidden = true;
+});
 $("#menuBtn").addEventListener("click", (e) => {
   e.stopPropagation();
   menu.hidden = !(menu as HTMLElement & { hidden: boolean }).hidden;

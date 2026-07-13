@@ -397,6 +397,27 @@ function appShell(_nonce: string): string {
   .cm-frontmatter:hover { color:var(--accent); }
   .editnote { font:0.72rem var(--mono); color:var(--ink-faint); margin-top:0.5rem; }
 
+  #tipsOverlay { position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:50;
+    display:flex; align-items:center; justify-content:center; padding:1rem; }
+  #tipsOverlay[hidden] { display:none; }
+  #tipsModal { background:var(--surface); border:1px solid var(--line); border-radius:14px;
+    max-width:26rem; width:100%; max-height:85dvh; overflow-y:auto; padding:1.1rem 1.25rem 1.25rem;
+    box-shadow:0 18px 50px rgba(0,0,0,0.3); }
+  .tipshead { display:flex; align-items:center; justify-content:space-between; margin-bottom:0.4rem; }
+  .tipshead strong { font-size:1.05rem; }
+  .tipsintro, .tipsfoot { font-size:0.83rem; color:var(--ink-soft); line-height:1.5; margin:0.4rem 0 0.8rem; }
+  .tipsfoot { margin:0.9rem 0 0; }
+  .tipstable { border-collapse:collapse; width:100%; font-size:0.86rem; }
+  .tipstable td { padding:0.42rem 0.4rem; border-bottom:1px solid var(--line); vertical-align:top; }
+  .tipstable tr:last-child td { border-bottom:none; }
+  .tipstable td:first-child { white-space:nowrap; padding-right:0.9rem; }
+  .tipstable code { font:0.82em var(--mono); background:var(--code-bg); border-radius:4px; padding:0.12em 0.4em; }
+  @media (max-width:720px) {
+    #tipsOverlay { align-items:flex-end; padding:0; }
+    #tipsModal { border-radius:16px 16px 0 0; max-width:none;
+      padding-bottom:calc(1.25rem + env(safe-area-inset-bottom)); }
+  }
+
   @media (max-width:720px) {
     /* Two-screen navigation: list OR note, never a cramped split. */
     #main { display:flex; }
@@ -455,6 +476,7 @@ function appShell(_nonce: string): string {
       <div class="menuwrap">
         <button class="iconbtn" id="menuBtn" title="Menu" aria-haspopup="true">⋯</button>
         <div class="menu" id="menu" hidden>
+          <button class="menuitem" id="tipsBtn">✎&ensp;Markdown tips</button>
           <button class="menuitem" id="refreshBtn">⟳&ensp;Pull latest</button>
           <button class="menuitem" id="themeBtn">◐&ensp;Light / dark</button>
           <button class="menuitem" id="lockBtn">🔒&ensp;Lock</button>
@@ -469,6 +491,28 @@ function appShell(_nonce: string): string {
     </div>
   </aside>
   <main class="pane" id="pane"><div id="note"><div class="placeholder">Select a note, or create one with ＋</div></div></main>
+</div>
+<div id="tipsOverlay" hidden>
+  <div id="tipsModal" role="dialog" aria-label="Markdown tips">
+    <div class="tipshead">
+      <strong>Writing basics</strong>
+      <button class="iconbtn" id="tipsClose" aria-label="Close">✕</button>
+    </div>
+    <p class="tipsintro">Just type — formatting appears as you write. The raw marks only show on the line you're editing.</p>
+    <table class="tipstable">
+      <tr><td><code># Title</code></td><td>big heading (<code>##</code>, <code>###</code> = smaller)</td></tr>
+      <tr><td><code>**bold**</code></td><td><strong>bold</strong></td></tr>
+      <tr><td><code>*italic*</code></td><td><em>italic</em></td></tr>
+      <tr><td><code>~~done~~</code></td><td><del>struck through</del></td></tr>
+      <tr><td><code>- item</code></td><td>• bulleted list</td></tr>
+      <tr><td><code>1. item</code></td><td>numbered list</td></tr>
+      <tr><td><code>[[Note title]]</code></td><td>link to another note</td></tr>
+      <tr><td><code>&gt; quote</code></td><td>quoted text</td></tr>
+      <tr><td><code>\`code\`</code></td><td>inline <code>code</code></td></tr>
+      <tr><td><code>---</code></td><td>divider line</td></tr>
+    </table>
+    <p class="tipsfoot">Tip: the box at the bottom of the list adds a timestamped line to today's daily note — the fastest way to capture a thought.</p>
+  </div>
 </div>
 <script src="/app/bundle.js"></script>
 </body>
