@@ -22,6 +22,7 @@ import Database from "better-sqlite3";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { verify, fromHex, toHex, utf8 } from "../crypto.js";
 import { verifyDeviceCert, verifyAgentChain, type DeviceCertPayload, type SignedCert } from "../account.js";
+import { landingShell } from "./landing.js";
 
 const MAX_BODY = 8 * 1024 * 1024;
 const MAX_SKEW_MS = 5 * 60 * 1000;
@@ -81,7 +82,14 @@ export async function startRelay(
 
     if (route === "GET /health") return sendJson(res, 200, { ok: true });
 
-    if (route === "GET /" || route === "GET /app") {
+    if (route === "GET /") {
+      res.writeHead(200, {
+        "Content-Type": "text/html; charset=utf-8",
+        "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:",
+      });
+      return void res.end(landingShell());
+    }
+    if (route === "GET /app") {
       const nonce = crypto.randomBytes(16).toString("base64");
       res.writeHead(200, {
         "Content-Type": "text/html; charset=utf-8",
