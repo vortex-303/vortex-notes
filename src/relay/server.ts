@@ -505,6 +505,24 @@ function appShell(_nonce: string): string {
   .cm-frontmatter:hover { color:var(--accent); }
   .editnote { font:0.72rem var(--mono); color:var(--ink-faint); margin-top:0.5rem; }
 
+  #pairOverlay { position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:50;
+    display:flex; align-items:center; justify-content:center; padding:1rem; }
+  #pairOverlay[hidden] { display:none; }
+  #pairModal { background:var(--surface); border:1px solid var(--line); border-radius:14px;
+    max-width:26rem; width:100%; padding:1.1rem 1.25rem 1.25rem; box-shadow:0 18px 50px rgba(0,0,0,0.3); }
+  .pairinput { width:100%; padding:0.7rem 0.9rem; border:1px solid var(--line); border-radius:8px;
+    background:var(--ground); color:var(--ink); font:600 1.1rem var(--mono); letter-spacing:0.25em;
+    text-transform:uppercase; text-align:center; outline:none; margin:0.4rem 0 0.7rem; }
+  .pairinput:focus { border-color:var(--accent); }
+  .pairgo { background:var(--accent); color:#fff; border:none; border-radius:8px;
+    padding:0.55rem 1.2rem; font:600 0.85rem var(--sans); cursor:pointer; }
+  [data-theme="dark"] .pairgo { color:#10211C; }
+  #pairModal .confirmrow { margin:0.4rem 0; }
+  @media (max-width:720px) {
+    #pairOverlay { align-items:flex-end; padding:0; }
+    #pairModal { border-radius:16px 16px 0 0; max-width:none;
+      padding-bottom:calc(1.25rem + env(safe-area-inset-bottom)); }
+  }
   #tipsOverlay { position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:50;
     display:flex; align-items:center; justify-content:center; padding:1rem; }
   #tipsOverlay[hidden] { display:none; }
@@ -584,6 +602,7 @@ function appShell(_nonce: string): string {
       <div class="menuwrap">
         <button class="iconbtn" id="menuBtn" title="Menu" aria-haspopup="true">⋯</button>
         <div class="menu" id="menu" hidden>
+          <button class="menuitem" id="pairBtn">🤝&ensp;Pair an agent</button>
           <button class="menuitem" id="tipsBtn">✎&ensp;Markdown tips</button>
           <button class="menuitem" id="refreshBtn">⟳&ensp;Pull latest</button>
           <button class="menuitem" id="themeBtn">◐&ensp;Light / dark</button>
@@ -599,6 +618,26 @@ function appShell(_nonce: string): string {
     </div>
   </aside>
   <main class="pane" id="pane"><div id="note"><div class="placeholder">Select a note, or create one with ＋</div></div></main>
+</div>
+<div id="pairOverlay" hidden>
+  <div id="pairModal" role="dialog" aria-label="Pair an agent">
+    <div class="tipshead"><strong>Pair an agent</strong><button class="iconbtn" id="pairClose" aria-label="Close">✕</button></div>
+    <div id="pairStep1">
+      <p class="tipsintro">On the agent's machine, run
+      <code>vortex-notes agent request --relay <span class="relayhost"></span> --name hermes</code>
+      and type the 6-letter code it shows:</p>
+      <input id="pairCode" class="pairinput" placeholder="e.g. KM3PXR" maxlength="6" autocomplete="off" autocapitalize="characters">
+      <button id="pairLookup" class="pairgo">Look up</button>
+    </div>
+    <div id="pairStep2" hidden>
+      <p class="tipsintro">Approve <strong id="pairName"></strong> for this space?</p>
+      <label class="confirmrow"><input type="radio" name="pairMode" value="rw" checked> Read + write</label>
+      <label class="confirmrow"><input type="radio" name="pairMode" value="ro"> Read-only (search &amp; read, never write)</label>
+      <p class="tipsfoot">Its key: <code id="pairFp"></code> — every edit it makes will be signed with it and revocable.</p>
+      <button id="pairApprove" class="pairgo">Approve</button>
+    </div>
+    <div id="pairStatus" class="tipsfoot"></div>
+  </div>
 </div>
 <div id="tipsOverlay" hidden>
   <div id="tipsModal" role="dialog" aria-label="Markdown tips">

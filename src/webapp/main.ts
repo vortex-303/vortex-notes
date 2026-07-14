@@ -11,11 +11,12 @@ import { EditorView, minimalSetup } from "codemirror";
 import { livePreview } from "./livemd.js";
 import { keymap, ViewUpdate } from "@codemirror/view";
 import { markdown } from "@codemirror/lang-markdown";
-import { accountFromPhrase, generatePhrase, certifyDevice, type PrincipalIdentity } from "../account.js";
+import { accountFromPhrase, generatePhrase, certifyDevice, certifyAgent, type PrincipalIdentity } from "../account.js";
 import { ulid } from "ulid";
 import {
   randomKey,
   sealBox,
+  toB64,
   randomSignKeypair,
   randomBoxKeypair,
   signKeypairFromSeed,
@@ -433,6 +434,83 @@ $("#list").addEventListener("click", (e) => {
 $("#newBtn").addEventListener("click", newNote);
 const menu = $("#menu");
 const tipsOverlay = $("#tipsOverlay");
+
+// --- pair an agent: full approval happens in this tab (we are a certified device) ---
+const pairOverlay = $("#pairOverlay");
+let pendingPair: { code: string; name: string; signPub: string; encPub: string } | null = null;
+function pairReset(): void {
+  pendingPair = null;
+  ($("#pairCode") as HTMLInputElement).value = "";
+  $("#pairStep1").hidden = false;
+  $("#pairStep2").hidden = true;
+  $("#pairStatus").textContent = "";
+}
+$("#pairBtn").addEventListener("click", () => {
+  if (!identity || !spaceKey) return alert("Unlock first.");
+  pairReset();
+  document.querySelectorAll(".relayhost").forEach((el) => (el.textContent = location.origin));
+  pairOverlay.hidden = false;
+  ($("#pairCode") as HTMLInputElement).focus();
+});
+$("#pairClose").addEventListener("click", () => (pairOverlay.hidden = true));
+pairOverlay.addEventListener("click", (e) => {
+  if (e.target === pairOverlay) pairOverlay.hidden = true;
+});
+$("#pairLookup").addEventListener("click", () => {
+  const code = ($("#pairCode") as HTMLInputElement).value.trim().toUpperCase();
+  if (code.length !== 6 || !client) return;
+  $("#pairStatus").textContent = "Looking up…";
+  client
+    .getPairing(code)
+    .then((req) => {
+      pendingPair = req;
+      $("#pairName").textContent = req.name;
+      $("#pairFp").textContent = req.signPub.slice(0, 16) + "…";
+      $("#pairStep1").hidden = true;
+      $("#pairStep2").hidden = false;
+      $("#pairStatus").textContent = "";
+    })
+    .catch((e) => ($("#pairStatus").textContent = (e as Error).message));
+});
+($("#pairCode") as HTMLInputElement).addEventListener("keydown", (e) => {
+  if ((e as KeyboardEvent).key === "Enter") $("#pairLookup").click();
+});
+$("#pairApprove").addEventListener("click", () => {
+  if (!pendingPair || !identity || !client || !spaceKey || !spaceId) return;
+  const req = pendingPair;
+  const mode = (document.querySelector('input[name="pairMode"]:checked') as HTMLInputElement).value as "ro" | "rw";
+  $("#pairStatus").textContent = "Certifying and granting…";
+  void (async () => {
+    const cert = certifyAgent(identity!.deviceSign, fromHex(req.signPub), fromHex(req.encPub), req.name, [spaceId!], mode);
+    // grant: add the agent's sealed space key and push the updated membership
+    const spaces = await client!.listSpaces();
+    const space = spaces.find((s) => s.id === spaceId)!;
+    const sealedKeys = { ...space.sealedKeys, [cert.signPub]: toHex(sealBox(spaceKey!, fromHex(req.encPub))) };
+    await client!.createSpace({ id: spaceId!, name: spaceId!, createdAt: space.createdAt, sealedKeys });
+    // register the agent so it can authenticate the moment it polls
+    await fetch("/v1/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        accountSignPub: identity!.file.accountSignPub,
+        accountEncPub: identity!.file.accountEncPub,
+        device: cert,
+        chain: identity!.file.device,
+      }),
+    });
+    const grant = {
+      v: 1,
+      relay: location.origin,
+      accountSignPub: identity!.file.accountSignPub,
+      accountEncPub: identity!.file.accountEncPub,
+      cert,
+      chain: identity!.file.device,
+    };
+    await client!.approvePairing(req.code, toB64(sealBox(utf8(JSON.stringify(grant)), fromHex(req.encPub))));
+    $("#pairStatus").textContent = `Approved — "${req.name}" is connecting itself now.`;
+    window.setTimeout(() => (pairOverlay.hidden = true), 2500);
+  })().catch((e) => ($("#pairStatus").textContent = (e as Error).message));
+});
 $("#tipsBtn").addEventListener("click", () => {
   tipsOverlay.hidden = false;
 });
