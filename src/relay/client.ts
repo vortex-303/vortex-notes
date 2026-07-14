@@ -74,6 +74,11 @@ export class RelayClient {
     await ok(await this.signed("POST", "/v1/pair/approve", { code, grant: grantB64 }));
   }
 
+  async getUsage(): Promise<{ bytesUsed: number; quotaBytes: number | null }> {
+    const res = await ok(await this.signed("GET", "/v1/usage"));
+    return (await res.json()) as { bytesUsed: number; quotaBytes: number | null };
+  }
+
   async listPrincipals(): Promise<
     { signPub: string; name: string; kind: string; spaces?: string[]; mode?: string; registeredAt: string }[]
   > {

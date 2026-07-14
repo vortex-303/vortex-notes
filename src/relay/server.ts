@@ -30,6 +30,8 @@ const MAX_SKEW_MS = 5 * 60 * 1000;
 export interface RelayOptions {
   port: number;
   dbPath?: string; // default in-memory
+  /** per-account ciphertext cap in bytes; undefined/0 = unlimited (self-host default) */
+  quotaBytes?: number;
 }
 
 export async function startRelay(
@@ -61,6 +63,10 @@ export async function startRelay(
       ts TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS updates_space_seq ON updates(space, seq);
+    CREATE TABLE IF NOT EXISTS accounts (
+      account TEXT PRIMARY KEY,
+      bytesUsed INTEGER NOT NULL DEFAULT 0
+    );
     CREATE TABLE IF NOT EXISTS pair_requests (
       code TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -70,6 +76,20 @@ export async function startRelay(
       approvedBlob TEXT
     );
   `);
+
+  // Backfill usage counters for accounts created before quotas existed.
+  db.exec(
+    "INSERT OR REPLACE INTO accounts (account, bytesUsed) " +
+      "SELECT s.account, COALESCE(SUM(LENGTH(u.blob)), 0) " +
+      "FROM spaces s LEFT JOIN updates u ON u.space = s.id GROUP BY s.account;"
+  );
+  const quota = opts.quotaBytes && opts.quotaBytes > 0 ? opts.quotaBytes : null;
+  const usageOf = (account: string): number =>
+    (db.prepare("SELECT bytesUsed FROM accounts WHERE account=?").get(account) as { bytesUsed: number } | undefined)
+      ?.bytesUsed ?? 0;
+  const addUsage = db.prepare(
+    "INSERT INTO accounts (account, bytesUsed) VALUES (?, ?) ON CONFLICT(account) DO UPDATE SET bytesUsed = bytesUsed + excluded.bytesUsed"
+  );
 
   const PAIR_TTL_MS = 15 * 60 * 1000;
   const pruneAndGetPair = (code: string) => {
@@ -220,6 +240,9 @@ export async function startRelay(
       return sendJson(res, 200, { ok: true });
     }
 
+    if (route === "GET /v1/usage") {
+      return sendJson(res, 200, { bytesUsed: usageOf(account), quotaBytes: quota });
+    }
     if (route === "GET /v1/principals") {
       const rows = db.prepare("SELECT signPub, cert, createdAt FROM devices WHERE account=?").all(account) as {
         signPub: string;
@@ -285,9 +308,15 @@ export async function startRelay(
         const b = parse(body);
         const blob = Buffer.from(String(b.blob ?? ""), "base64");
         if (!blob.length) return sendJson(res, 400, { error: "blob (base64) required" });
+        if (quota && usageOf(account) + blob.length > quota) {
+          return sendJson(res, 413, {
+            error: "Storage quota exceeded (" + Math.round(quota / 1e6) + "MB). Delete notes or upgrade.",
+          });
+        }
         const info = db
           .prepare("INSERT INTO updates (space, doc, author, blob, ts) VALUES (?, ?, ?, ?, ?)")
           .run(spaceId, spaceMatch[2], devicePub, blob, new Date().toISOString());
+        addUsage.run(account, blob.length);
         return sendJson(res, 200, { seq: Number(info.lastInsertRowid) });
       }
 

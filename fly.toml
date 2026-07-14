@@ -7,6 +7,7 @@ primary_region = "gru"
 [env]
   PORT = "7300"
   RELAY_DB = "/data/relay.db"
+  RELAY_QUOTA_MB = "50"
 
 [mounts]
   source = "vortex_relay_data"

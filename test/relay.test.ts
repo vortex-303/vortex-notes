@@ -175,6 +175,41 @@ test("web-first onboarding: account + space created browser-style, CLI machine j
   }
 });
 
+test("quota: pushes are rejected past the cap; usage endpoint reports", async () => {
+  const relay = await startRelay({ port: 0, quotaBytes: 2000 });
+  const base = `http://127.0.0.1:${relay.port}`;
+  try {
+    freshHome();
+    const { identity } = initIdentity("mac");
+    const space = createSpace(identity, "tiny");
+    const key = openSpaceKey(identity, space);
+    const c = new RelayClient(base, identity);
+    await c.register();
+    await c.createSpace(space);
+
+    // a ~1KB blob fits; the second one crosses 2000 bytes and is rejected
+    const blob = encryptDoc(key, "a.md", "x".repeat(900));
+    await c.pushUpdate(space.id, "a.md", blob);
+    const usage = await c.getUsage();
+    assert.ok(usage.bytesUsed > 900 && usage.quotaBytes === 2000);
+    await assert.rejects(c.pushUpdate(space.id, "b.md", encryptDoc(key, "b.md", "y".repeat(1200))), /quota exceeded/i);
+
+    // unlimited relay (no option) never rejects
+    const free = await startRelay({ port: 0 });
+    try {
+      const cf = new RelayClient(`http://127.0.0.1:${free.port}`, identity);
+      await cf.register();
+      await cf.createSpace(space);
+      await cf.pushUpdate(space.id, "big.md", encryptDoc(key, "big.md", "z".repeat(5000)));
+      assert.equal((await cf.getUsage()).quotaBytes, null);
+    } finally {
+      await free.close();
+    }
+  } finally {
+    await relay.close();
+  }
+});
+
 test("relay auth: unregistered devices, bad signatures, foreign spaces are rejected", async () => {
   const relay = await startRelay({ port: 0 });
   const base = `http://127.0.0.1:${relay.port}`;

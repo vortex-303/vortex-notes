@@ -233,7 +233,16 @@ async function main(): Promise<void> {
       } else if (sub === "status") {
         const state = loadSyncState(vault);
         if (!state) console.log("Not linked. Use 'sync link' or 'sync join'.");
-        else console.log(`Linked to ${state.spaceId} via ${state.relay} — cursor ${state.cursor}, ${Object.keys(state.files).length} files tracked.`);
+        else {
+          console.log(`Linked to ${state.spaceId} via ${state.relay} — cursor ${state.cursor}, ${Object.keys(state.files).length} files tracked.`);
+          try {
+            if (state.home) process.env.VORTEX_NOTES_HOME = state.home;
+            const { RelayClient } = await import("./relay/client.js");
+            const usage = await new RelayClient(state.relay, loadIdentity()).getUsage();
+            const used = (usage.bytesUsed / 1e6).toFixed(1);
+            console.log(usage.quotaBytes ? `Storage: ${used}MB of ${Math.round(usage.quotaBytes / 1e6)}MB` : `Storage: ${used}MB (no quota)`);
+          } catch { /* offline is fine */ }
+        }
       } else if (sub === undefined || sub === "now") {
         const r = await syncVault(vault);
         console.log(`Synced: pulled ${r.pulled}, pushed ${r.pushed}${r.conflicts.length ? `, conflicts: ${r.conflicts.join(", ")}` : ""}.`);
