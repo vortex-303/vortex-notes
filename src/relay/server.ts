@@ -99,11 +99,12 @@ export async function startRelay(
     if (route === "GET /health") return sendJson(res, 200, { ok: true });
 
     if (route === "GET /") {
+      const nonce = crypto.randomBytes(16).toString("base64");
       res.writeHead(200, {
         "Content-Type": "text/html; charset=utf-8",
-        "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:",
+        "Content-Security-Policy": "default-src 'none'; script-src 'nonce-" + nonce + "'; style-src 'unsafe-inline'; img-src 'self' data:",
       });
-      return void res.end(landingShell());
+      return void res.end(landingShell(nonce));
     }
     if (route === "GET /app") {
       const nonce = crypto.randomBytes(16).toString("base64");

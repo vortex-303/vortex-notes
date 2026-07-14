@@ -7,9 +7,14 @@ import { startWebServer } from "./server.js";
 import { initIdentity, loginIdentity, loadIdentity, hasIdentity, vortexHome } from "./identity.js";
 import { createSpace, listSpaces, getSpace, openSpaceKey, encryptDoc, decryptDoc } from "./spaces.js";
 
+const DEFAULT_RELAY = "https://vortex-relay.fly.dev";
+
 const HELP = `vortex-notes — markdown vault with a first-party MCP server and local semantic search
 
 Usage:
+  vortex-notes pair [--name <agent>] [--relay <url>]
+                                               Connect this machine as an agent: shows a code,
+                                               you approve it in the web app, done
   vortex-notes init [--vault <dir>]           Create a vault (default: ~/VortexNotes)
   vortex-notes mcp [--vault <dir>] [--read-only] [--no-watch]
                                                Start the MCP server (stdio)
@@ -81,6 +86,23 @@ async function main(): Promise<void> {
   const vault = Vault.resolve(args.flags.get("vault") as string | undefined);
 
   switch (args.command) {
+    case "pair": {
+      const { requestPairing } = await import("./agents.js");
+      const relay = (args.flags.get("relay") as string) ?? DEFAULT_RELAY;
+      const name = (args.flags.get("name") as string) ?? `agent@${(await import("node:os")).default.hostname()}`;
+      const { code, complete } = await requestPairing(relay, name);
+      console.log(`\n  Pairing code:  ${code.split("").join(" ")}\n`);
+      console.log(`Approve it from your notes app (${relay}/app):`);
+      console.log(`  ⋯ menu → Pair an agent → type the code\n`);
+      console.log(`Waiting for approval…`);
+      const r = await complete();
+      console.log(`\nPaired as "${r.name}". Notes are syncing to ${r.vault}\n`);
+      console.log(`Wire it into your agent:`);
+      console.log(`  Hermes:      hermes mcp add vortex-notes --command vortex-notes --args mcp --vault ${r.vault}`);
+      console.log(`  Claude Code: claude mcp add vortex-notes -- vortex-notes mcp --vault ${r.vault}`);
+      console.log(`  Any MCP:     { "command": "vortex-notes", "args": ["mcp", "--vault", "${r.vault}"] }`);
+      break;
+    }
     case "init": {
       vault.init();
       console.log(`Vault ready at ${vault.root}`);
@@ -272,9 +294,9 @@ Wire it into any MCP harness — this single command does everything:`);
         console.log(`MCP for any harness: { "command": "vortex-notes", "args": ["mcp", "--vault", "${r.vault}"] }`);
       } else if (sub === "approve") {
         const code = args.positional[1];
-        const relay = args.flags.get("relay") as string;
+        const relay = (args.flags.get("relay") as string) ?? DEFAULT_RELAY;
         const spacesArg = args.flags.get("space") as string;
-        if (!code || !relay || !spacesArg) fail("Usage: vortex-notes agent approve <code> --space <name|id>[,<more>] --relay <url> [--read-only]");
+        if (!code || !spacesArg) fail("Usage: vortex-notes agent approve <code> --space <name|id>[,<more>] [--relay <url>] [--read-only]");
         const mode = args.flags.has("read-only") ? ("ro" as const) : ("rw" as const);
         const record = await approvePairing(code.toUpperCase(), spacesArg.split(","), mode, relay);
         console.log(`Approved "${record.name}" (${mode === "ro" ? "read-only" : "read+write"}) for spaces: ${record.spaces.join(", ")}.`);
