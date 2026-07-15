@@ -15,6 +15,9 @@ Usage:
   vortex-notes pair [--name <agent>] [--relay <url>]
                                                Connect this machine as an agent: shows a code,
                                                you approve it in the web app, done
+  vortex-notes setup [--vault <dir>] [--relay <url>]
+                                               Everything in one go: asks your 12 words, joins
+                                               your notes, first sync. New machine → done.
   vortex-notes init [--vault <dir>]           Create a vault (default: ~/VortexNotes)
   vortex-notes mcp [--vault <dir>] [--read-only] [--no-watch]
                                                Start the MCP server (stdio)
@@ -86,6 +89,31 @@ async function main(): Promise<void> {
   const vault = Vault.resolve(args.flags.get("vault") as string | undefined);
 
   switch (args.command) {
+    case "setup": {
+      const relay = (args.flags.get("relay") as string) ?? DEFAULT_RELAY;
+      const { joinVault, syncVault, loadSyncState } = await import("./sync.js");
+      if (!hasIdentity()) {
+        const phrase = await promptHidden("Your 12-word recovery phrase (from the app or 'identity init'): ");
+        const deviceName = `${process.env.USER ?? "device"}@${(await import("node:os")).default.hostname()}`;
+        loginIdentity(phrase, deviceName);
+        vault.init();
+        if (!loadSyncState(vault)) await joinVault(vault, relay, phrase);
+      } else {
+        console.log("Identity already on this machine — checking the vault…");
+        vault.init();
+        if (!loadSyncState(vault)) {
+          const phrase = await promptHidden("Your 12-word recovery phrase (needed once to join the space): ");
+          await joinVault(vault, relay, phrase);
+        }
+      }
+      const r = await syncVault(vault);
+      console.log(`\nDone. Your notes live at ${vault.root} (${r.pulled} pulled).`);
+      console.log(`\nUseful next steps:`);
+      console.log(`  vortex-notes search "anything"                      # local semantic search`);
+      console.log(`  vortex-notes serve                                  # local web app`);
+      console.log(`  claude mcp add vortex-notes -- vortex-notes mcp --vault ${vault.root}`);
+      break;
+    }
     case "pair": {
       const { requestPairing } = await import("./agents.js");
       const relay = (args.flags.get("relay") as string) ?? DEFAULT_RELAY;
@@ -214,14 +242,13 @@ async function main(): Promise<void> {
       const { linkVault, joinVault, syncVault, loadSyncState, relinkVault } = await import("./sync.js");
       const sub = args.positional[0];
       if (sub === "link") {
-        const relay = args.flags.get("relay") as string;
+        const relay = (args.flags.get("relay") as string) ?? DEFAULT_RELAY;
         const spaceName = args.flags.get("space") as string;
-        if (!relay || !spaceName) fail("Usage: vortex-notes sync link --relay <url> --space <name>");
+        if (!spaceName) fail("Usage: vortex-notes sync link --space <name> [--relay <url>]");
         const state = await linkVault(vault, relay, spaceName);
         console.log(`Linked vault to space ${state.spaceId} on ${relay}. Run 'vortex-notes sync' to push.`);
       } else if (sub === "join") {
-        const relay = args.flags.get("relay") as string;
-        if (!relay) fail("Usage: vortex-notes sync join --relay <url> [--space <id>]");
+        const relay = (args.flags.get("relay") as string) ?? DEFAULT_RELAY;
         const phrase = await promptHidden("Enter your 12-word recovery phrase (needed once to unseal the space key): ");
         const state = await joinVault(vault, relay, phrase, args.flags.get("space") as string | undefined);
         console.log(`Joined space ${state.spaceId}. Run 'vortex-notes sync' to pull your notes.`);

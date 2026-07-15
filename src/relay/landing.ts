@@ -156,10 +156,11 @@ export function landingShell(nonce: string): string {
   <li><div>On your computer, your notes become a plain folder of markdown — Obsidian-compatible, greppable, yours:</div></li>
 </ol>
 <div class="codewrap"><pre>npm install -g vortex-notes
-vortex-notes identity login          <span class="c"># your 12 words, once per machine</span>
-vortex-notes init && vortex-notes sync join --relay ${RELAY}
-vortex-notes sync                    <span class="c"># .md files appear; edit with anything</span>
+vortex-notes setup                   <span class="c"># asks your 12 words — that's the whole setup</span>
 vortex-notes search "that idea"      <span class="c"># semantic search, fully local, any language</span></pre><button class="copy">copy</button></div>
+<p class="note">Your notes appear as a plain folder of markdown (<code>~/VortexNotes</code>) and stay
+in sync. Power users: the <code>identity</code>, <code>sync</code>, and <code>space</code> subcommands
+do each step individually, including pointing at a self-hosted relay.</p>
 
 <span class="k" id="agents">Door 2 · For your agents</span>
 <h2>Agents are principals, not passengers</h2>
