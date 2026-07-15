@@ -213,10 +213,8 @@ command prints the exact wiring line for your harness:</p>
     <div class="codewrap"><pre>claude mcp add vortex-notes -- vortex-notes mcp --vault ~/VortexNotes</pre><button class="copy">copy</button></div>
   </div>
   <div class="agent"><h4>Hermes <span>MCP · pairing</span></h4>
-    <p>After <code>npx vortex-notes pair</code> on the Hermes machine:</p>
-    <p><code>npx vortex-notes pair</code> wires Hermes automatically when it finishes — just type
-    <code>/reload-mcp</code> in your Hermes chat. If it can't reach the <code>hermes</code> command,
-    it prints the one line to paste.</p>
+    <p><code>npx vortex-notes pair</code> on the Hermes machine wires it in automatically once you
+    approve — then just type <code>/reload-mcp</code> in your Hermes chat.</p>
   </div>
   <div class="agent"><h4>OpenClaw <span>skill · files</span></h4>
     <p>OpenClaw is filesystem-native: sync a vault on its machine (pair it, or use your own
