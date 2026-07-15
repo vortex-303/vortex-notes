@@ -3,3 +3,10 @@ dist/
 dist-test/
 *.log
 .DS_Store
+
+# Never commit identity/key material or stray home dirs
+undefined/
+.vortex-notes/
+.vortex-agents/
+*.key
+identity.json
