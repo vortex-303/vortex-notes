@@ -210,7 +210,7 @@ export async function connectAgent(
     const vault = new Vault(vaultDir);
     vault.init();
     if (vault.isPristineWelcome()) fs.rmSync(vault.abs("Welcome.md"), { force: true });
-    const state: SyncState = { v: 1, relay: token.relay, spaceId: adopted[0], cursor: 0, files: {} };
+    const state: SyncState = { v: 1, relay: token.relay, spaceId: adopted[0], cursor: 0, files: {}, home: vortexHome() };
     fs.writeFileSync(path.join(vault.metaDir, "sync.json"), JSON.stringify(state, null, 2) + "\n");
     vaultPath = vault.root;
   }

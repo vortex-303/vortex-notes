@@ -130,31 +130,43 @@ async function main(): Promise<void> {
       const r = await complete();
       console.log(`\nPaired as "${r.name}". Notes are syncing to ${r.vault}`);
 
-      // Try to wire known harnesses automatically. Absolute node + script
-      // paths sidestep PATH problems; bare "mcp" autodetects this vault.
+      // Wire known harnesses automatically. We pass the EXACT vault via env
+      // (VORTEX_NOTES_VAULT) so the server is pinned to this paired vault —
+      // never guessing, never falling back to some other vault on the machine.
+      // Absolute node + script paths sidestep PATH problems.
       const { spawnSync } = await import("node:child_process");
       const fsm = await import("node:fs");
       const cliPath = fsm.default.realpathSync(process.argv[1]);
+      const vaultEnv = `VORTEX_NOTES_VAULT=${r.vault}`;
       let wired = false;
-      const hermes = spawnSync("hermes", ["mcp", "add", "vortex-notes", "--command", process.execPath, "--args", cliPath, "mcp"],
-        { input: "Y\n", encoding: "utf8", timeout: 30000 });
+      // Replace any stale entry first so re-pairs never leave a wrong one behind.
+      spawnSync("hermes", ["mcp", "remove", "vortex-notes"], { encoding: "utf8", timeout: 15000 });
+      const hermes = spawnSync(
+        "hermes",
+        ["mcp", "add", "vortex-notes", "--command", process.execPath, "--env", vaultEnv, "--args", cliPath, "mcp"],
+        { input: "Y\n", encoding: "utf8", timeout: 30000 }
+      );
       if (hermes.status === 0) {
-        console.log(`\n✓ Wired into Hermes — type /reload-mcp in your Hermes chat and you're done.`);
+        console.log(`\n✓ Wired into Hermes, pinned to this vault — type /reload-mcp in your Hermes chat and you're done.`);
         wired = true;
       }
       if (!wired) {
-        const claude = spawnSync("claude", ["mcp", "add", "vortex-notes", "--", process.execPath, cliPath, "mcp"],
-          { encoding: "utf8", timeout: 30000 });
+        spawnSync("claude", ["mcp", "remove", "vortex-notes"], { encoding: "utf8", timeout: 15000 });
+        const claude = spawnSync(
+          "claude",
+          ["mcp", "add", "vortex-notes", "--env", vaultEnv, "--", process.execPath, cliPath, "mcp"],
+          { encoding: "utf8", timeout: 30000 }
+        );
         if (claude.status === 0) {
-          console.log(`\n✓ Wired into Claude Code.`);
+          console.log(`\n✓ Wired into Claude Code, pinned to this vault.`);
           wired = true;
         }
       }
       if (!wired) {
-        console.log(`\nWire it into your agent (bare 'mcp' finds this vault automatically):`);
-        console.log(`  Hermes:      hermes mcp add vortex-notes --command ${process.execPath} --args ${cliPath} mcp`);
-        console.log(`  Claude Code: claude mcp add vortex-notes -- vortex-notes mcp`);
-        console.log(`  Any MCP:     { "command": "vortex-notes", "args": ["mcp"] }`);
+        console.log(`\nWire it into your agent — the vault is pinned via VORTEX_NOTES_VAULT so it can't drift:`);
+        console.log(`  Hermes:      hermes mcp add vortex-notes --command ${process.execPath} --env ${vaultEnv} --args ${cliPath} mcp`);
+        console.log(`  Claude Code: claude mcp add vortex-notes --env ${vaultEnv} -- vortex-notes mcp`);
+        console.log(`  Any MCP:     { "command": "vortex-notes", "args": ["mcp"], "env": { "VORTEX_NOTES_VAULT": "${r.vault}" } }`);
       }
       break;
     }
