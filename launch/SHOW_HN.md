@@ -8,38 +8,43 @@
 
 ## Post body
 
-I kept seeing the same duct tape everywhere: people pointing OpenClaw or Claude
-Code at an Obsidian vault through community REST plugins, self-signed certs, and
-keyword-only search — or maintaining a folder of MEMORY.md files by hand.
+I kept seeing the same duct tape: people pointing OpenClaw, Hermes, or Claude
+Code at an Obsidian vault through community REST plugins and keyword-only search
+— or hand-maintaining a folder of MEMORY.md files. So I built the thing in the
+middle: one plain-markdown knowledge base that you and your agents share.
 
-So I built the thing in the middle: a plain markdown vault with a first-party
-MCP server and zero-config local semantic search.
+The pitch is "your notes AND your agents' memory, one encrypted place":
 
-- Your notes are just .md files in a folder. Open them in Obsidian, grep them,
-  git them. The index (SQLite) is a disposable cache next to them.
-- `vortex-notes mcp` exposes task-shaped tools over stdio: search_notes,
-  read_note, surgical edit_note, append_daily, recent_activity, build_context
-  (top notes + one hop of wikilinks/backlinks in one call), and remember.
-- `remember(fact, supersedes)` gives facts a lifecycle in plain markdown:
-  dated bullets with stable ^ids; superseding a fact strikes the old line
-  through and points to the new one. Your agent's beliefs stay auditable —
-  you can read what it knows and see what it used to believe.
-- Search is hybrid BM25 + multilingual embeddings (FTS5 + sqlite-vec +
-  multilingual-e5-small via transformers.js), fully on-device. No API key.
-  Works across ~100 languages — an English query finds your Spanish notes.
-- `--read-only` flag if you want an agent that can search and read but never
-  write.
+- **Files are the truth.** Your notes are .md files in a folder — Obsidian-
+  compatible, greppable, git-able. A first-party MCP server (`vortex-notes mcp`)
+  exposes task-shaped tools: search_notes, surgical edit_note, append_daily,
+  build_context, and remember (facts with supersession — the old line gets
+  struck through and points to the new one, so an agent's beliefs stay
+  auditable, never silently overwritten).
+- **Search is on-device.** Hybrid BM25 + multilingual embeddings (FTS5 +
+  sqlite-vec + a small local model). No API key, works across ~100 languages —
+  an English query finds your Spanish notes.
+- **E2E-encrypted sync.** A 12-word phrase is your whole account; the relay
+  stores ciphertext only (self-host it with one command, or use the hosted one).
+  The web app derives keys in-tab — sign up, write, edit on your phone with
+  Obsidian-style live-preview markdown. No password, no reset, because there's
+  nothing on the server to reset.
+- **Agents are principals, not passengers.** `npx vortex-notes pair` on an
+  agent's machine shows a 6-letter code; you approve it from the app (read-only
+  optional). The agent gets its OWN key — generated on its machine, never
+  transmitted, certified by yours, scoped to the spaces you grant, relay-
+  enforced. Every edit it makes is signed as the agent, and revoke is one
+  command. No competitor combines "agents can fully use it" with "the server
+  can't read it" — that quadrant was empty.
 
-No accounts, no server, no plugins, MIT. npm install -g vortex-notes.
+Stack: TypeScript, all-MIT (noble/scure crypto, CodeMirror, better-sqlite3,
+transformers.js). ~35 tests. Relay is a small Node service on Fly.
 
-Where this is going: end-to-end encrypted multi-device sync where agents are
-first-class cryptographic principals — you share a notebook with an agent the
-way you'd share it with a person (sealed per-space keys), every agent write is
-signed and attributable, and there's a one-click "undo everything agent X did."
-The local CLI stays free and open source.
+npm install -g vortex-notes · https://github.com/vortex-303/vortex-notes
 
-Happy to answer questions on the search quality tradeoffs (RRF keyword-leg
-pollution was the interesting bug) or the E2EE + agents design.
+Happy to dig into the design: how agents get scoped access without ever seeing
+your phrase (account -> device -> agent certificate chain), why I chose 3-way
+merge over a CRDT for now, or the RRF keyword-leg pollution bug in search.
 
 ## Launch checklist
 - [x] GitHub repo created (vortex-303/vortex-notes, PRIVATE — flip to public at launch, set topics: mcp, agent-memory, notes, e2ee, markdown)
