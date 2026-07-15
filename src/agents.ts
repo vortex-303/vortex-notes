@@ -387,20 +387,34 @@ export async function revokeAgent(name: string, relayUrl: string): Promise<Agent
   } catch (err) {
     if (!/No such principal/.test((err as Error).message)) throw err;
   }
+  // Use the relay's CURRENT membership as the base and remove only this agent —
+  // never push a possibly-stale local copy, which would clobber grants made
+  // from other devices (e.g. an agent you paired from your phone).
+  let remoteSpaces: Awaited<ReturnType<RelayClient["listSpaces"]>> = [];
+  try {
+    remoteSpaces = await client.listSpaces();
+  } catch {
+    /* offline: relay ban already applied above, which is the real enforcement */
+  }
+  const regFile = path.join(vortexHome(), "spaces.json");
   for (const spaceId of record.spaces) {
+    const remote = remoteSpaces.find((s) => s.id === spaceId);
+    if (remote && record.signPub in remote.sealedKeys) {
+      const merged = { ...remote.sealedKeys };
+      delete merged[record.signPub];
+      try {
+        await client.createSpace({ id: spaceId, name: spaceId, createdAt: remote.createdAt, sealedKeys: merged });
+      } catch { /* relay ban is the primary enforcement */ }
+    }
+    // Keep the local copy consistent too.
     try {
-      const space = getSpace(spaceId);
-      delete space.sealedKeys[record.signPub];
-      // persist locally by re-granting nothing: rewrite via grant file helpers
-      const regFile = path.join(vortexHome(), "spaces.json");
       const data = JSON.parse(fs.readFileSync(regFile, "utf8")) as { v: 1; spaces: { id: string; sealedKeys: Record<string, string> }[] };
       const s = data.spaces.find((x) => x.id === spaceId);
-      if (s) delete s.sealedKeys[record.signPub];
-      fs.writeFileSync(regFile, JSON.stringify(data, null, 2) + "\n");
-      await client.createSpace(getSpace(spaceId));
-    } catch {
-      /* space may be gone; relay ban is the primary enforcement */
-    }
+      if (s && record.signPub in s.sealedKeys) {
+        delete s.sealedKeys[record.signPub];
+        fs.writeFileSync(regFile, JSON.stringify(data, null, 2) + "\n");
+      }
+    } catch { /* no local copy of this space — fine */ }
   }
   record.revokedAt = new Date().toISOString();
   saveRegistry(reg);
