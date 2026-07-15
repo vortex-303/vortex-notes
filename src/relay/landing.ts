@@ -214,7 +214,9 @@ command prints the exact wiring line for your harness:</p>
   </div>
   <div class="agent"><h4>Hermes <span>MCP · pairing</span></h4>
     <p>After <code>npx vortex-notes pair</code> on the Hermes machine:</p>
-    <div class="codewrap"><pre>hermes mcp add vortex-notes --command vortex-notes --args mcp --vault &lt;printed path&gt;</pre><button class="copy">copy</button></div>
+    <div class="codewrap"><pre>hermes mcp add vortex-notes --command vortex-notes \\
+  --env VORTEX_NOTES_VAULT=&lt;printed path&gt; --args mcp</pre><button class="copy">copy</button></div>
+    <p>(the vault goes in <code>--env</code> — Hermes' own parser eats <code>--flags</code> inside <code>--args</code>)</p>
   </div>
   <div class="agent"><h4>OpenClaw <span>skill · files</span></h4>
     <p>OpenClaw is filesystem-native: sync a vault on its machine (pair it, or use your own

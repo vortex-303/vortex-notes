@@ -86,6 +86,10 @@ function parseArgs(argv: string[]): Args {
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
+  if (args.flags.has("help") || args.flags.has("h")) {
+    console.log(HELP);
+    return;
+  }
   const vault = Vault.resolve(args.flags.get("vault") as string | undefined);
 
   switch (args.command) {
@@ -126,7 +130,7 @@ async function main(): Promise<void> {
       const r = await complete();
       console.log(`\nPaired as "${r.name}". Notes are syncing to ${r.vault}\n`);
       console.log(`Wire it into your agent:`);
-      console.log(`  Hermes:      hermes mcp add vortex-notes --command vortex-notes --args mcp --vault ${r.vault}`);
+      console.log(`  Hermes:      hermes mcp add vortex-notes --command vortex-notes --env VORTEX_NOTES_VAULT=${r.vault} --args mcp`);
       console.log(`  Claude Code: claude mcp add vortex-notes -- vortex-notes mcp --vault ${r.vault}`);
       console.log(`  Any MCP:     { "command": "vortex-notes", "args": ["mcp", "--vault", "${r.vault}"] }`);
       break;
