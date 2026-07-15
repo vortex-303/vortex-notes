@@ -128,11 +128,34 @@ async function main(): Promise<void> {
       console.log(`  ⋯ menu → Pair an agent → type the code\n`);
       console.log(`Waiting for approval…`);
       const r = await complete();
-      console.log(`\nPaired as "${r.name}". Notes are syncing to ${r.vault}\n`);
-      console.log(`Wire it into your agent:`);
-      console.log(`  Hermes:      hermes mcp add vortex-notes --command vortex-notes --env VORTEX_NOTES_VAULT=${r.vault} --args mcp`);
-      console.log(`  Claude Code: claude mcp add vortex-notes -- vortex-notes mcp --vault ${r.vault}`);
-      console.log(`  Any MCP:     { "command": "vortex-notes", "args": ["mcp", "--vault", "${r.vault}"] }`);
+      console.log(`\nPaired as "${r.name}". Notes are syncing to ${r.vault}`);
+
+      // Try to wire known harnesses automatically. Absolute node + script
+      // paths sidestep PATH problems; bare "mcp" autodetects this vault.
+      const { spawnSync } = await import("node:child_process");
+      const fsm = await import("node:fs");
+      const cliPath = fsm.default.realpathSync(process.argv[1]);
+      let wired = false;
+      const hermes = spawnSync("hermes", ["mcp", "add", "vortex-notes", "--command", process.execPath, "--args", cliPath, "mcp"],
+        { input: "Y\n", encoding: "utf8", timeout: 30000 });
+      if (hermes.status === 0) {
+        console.log(`\n✓ Wired into Hermes — type /reload-mcp in your Hermes chat and you're done.`);
+        wired = true;
+      }
+      if (!wired) {
+        const claude = spawnSync("claude", ["mcp", "add", "vortex-notes", "--", process.execPath, cliPath, "mcp"],
+          { encoding: "utf8", timeout: 30000 });
+        if (claude.status === 0) {
+          console.log(`\n✓ Wired into Claude Code.`);
+          wired = true;
+        }
+      }
+      if (!wired) {
+        console.log(`\nWire it into your agent (bare 'mcp' finds this vault automatically):`);
+        console.log(`  Hermes:      hermes mcp add vortex-notes --command ${process.execPath} --args ${cliPath} mcp`);
+        console.log(`  Claude Code: claude mcp add vortex-notes -- vortex-notes mcp`);
+        console.log(`  Any MCP:     { "command": "vortex-notes", "args": ["mcp"] }`);
+      }
       break;
     }
     case "init": {
@@ -173,7 +196,17 @@ async function main(): Promise<void> {
       break;
     }
     case "mcp": {
-      await startMcpServer(vault, {
+      let target = vault;
+      if (!args.flags.get("vault") && !process.env.VORTEX_NOTES_VAULT && !vault.exists()) {
+        const { findSoleAgentVault } = await import("./agents.js");
+        const sole = findSoleAgentVault();
+        if (sole) {
+          process.env.VORTEX_NOTES_HOME = sole.home;
+          target = new Vault(sole.vault);
+          console.error(`[vortex-notes] serving paired agent vault: ${sole.vault}`);
+        }
+      }
+      await startMcpServer(target, {
         readOnly: args.flags.has("read-only") || process.env.VORTEX_NOTES_READONLY === "1",
         watch: !args.flags.has("no-watch"),
       });

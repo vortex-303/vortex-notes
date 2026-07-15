@@ -217,6 +217,25 @@ export async function connectAgent(
   return { name: token.cert.name, fingerprint: identity.file.fingerprint, spaces: adopted, vault: vaultPath };
 }
 
+/**
+ * If exactly one paired agent lives on this machine, return its home+vault —
+ * lets bare `vortex-notes mcp` serve it with zero flags.
+ */
+export function findSoleAgentVault(): { home: string; vault: string; name: string } | null {
+  const base = process.env.VORTEX_NOTES_AGENTS_DIR ?? path.join(os.homedir(), ".vortex-agents");
+  if (!fs.existsSync(base)) return null;
+  const hits: { home: string; vault: string; name: string }[] = [];
+  for (const entry of fs.readdirSync(base, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const home = path.join(base, entry.name, "home");
+    const vault = path.join(base, entry.name, "vault");
+    if (fs.existsSync(path.join(home, "identity.json")) && fs.existsSync(path.join(vault, ".vortex"))) {
+      hits.push({ home, vault, name: entry.name });
+    }
+  }
+  return hits.length === 1 ? hits[0] : null;
+}
+
 interface PairGrant {
   v: 1;
   relay: string;

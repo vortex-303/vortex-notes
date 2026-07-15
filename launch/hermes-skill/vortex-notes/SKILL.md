@@ -73,12 +73,9 @@ Preferred when the harness supports MCP (stdio):
 { "command": "vortex-notes", "args": ["mcp"], "env": { "VORTEX_NOTES_VAULT": "<vault>" } }
 ```
 
-Via the Hermes CLI (pass the vault through `--env` — the top-level parser
-intercepts `--flags` placed inside `--args`):
-
-```sh
-hermes mcp add vortex-notes --command vortex-notes --env VORTEX_NOTES_VAULT=<vault> --args mcp
-```
+If the user granted this agent its own scoped access via `npx vortex-notes pair`,
+that command wires Hermes automatically and a bare `vortex-notes mcp` (no flags)
+serves the paired vault — nothing else to configure.
 
 If the user granted this agent its own scoped access (an `vnat1_…` agent token),
 a single self-bootstrapping command replaces all setup:
