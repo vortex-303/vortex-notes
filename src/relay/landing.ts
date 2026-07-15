@@ -121,19 +121,42 @@ export function landingShell(nonce: string): string {
   footer { margin-top:4.5rem; padding-top:1.5rem; border-top:1px solid var(--line);
     font-size:0.8rem; color:var(--ink-faint); }
   footer a { color:var(--accent); }
-  @media (max-width:600px) {
-    h1 { font-size:1.85rem; }
-    nav.top .in { gap:0.8rem; overflow-x:auto; }
+  .tabbar { display:none; }
+
+  /* Mobile: app shell — no page scroll, bottom tabs switch full-height panels */
+  @media (max-width:720px) {
+    html, body { height:100dvh; overflow:hidden; }
+    body { display:flex; flex-direction:column; }
+    nav.top { position:static; }
+    nav.top .in a.dlink { display:none; }
+    .page { flex:1; min-height:0; display:flex; flex-direction:column; padding:0 1.2rem; }
+    section.door { display:none; }
+    section.door.active { display:block; flex:1; min-height:0; overflow-y:auto;
+      -webkit-overflow-scrolling:touch; padding:0.4rem 0.2rem 2.5rem; }
+    header.hero { padding:1.6rem 0 0; }
+    h1 { font-size:1.7rem; }
+    .tagline { font-size:0.98rem; }
+    .promise { font-size:0.85rem; margin-top:1.4rem; }
+    .k { margin-top:1.4rem; }
+    footer { display:none; }
+    .tabbar { display:flex; flex:none; background:var(--surface); border-top:1px solid var(--line);
+      padding:0.35rem 0.4rem calc(0.35rem + env(safe-area-inset-bottom)); }
+    .tabbar button { flex:1; background:none; border:none; color:var(--ink-faint); cursor:pointer;
+      font:500 1.05rem var(--sans); padding:0.3rem 0; border-radius:9px; display:flex;
+      flex-direction:column; align-items:center; gap:0.1rem; }
+    .tabbar button span { font:600 0.6rem var(--mono); letter-spacing:0.06em; text-transform:uppercase; }
+    .tabbar button.on { color:var(--accent); background:var(--accent-soft); }
   }
 </style>
 </head>
 <body>
 <nav class="top"><div class="in">
   <span class="navmark"><span class="mark" aria-hidden="true">${MARK}</span><span><span class="vx">Vortex</span> Notes</span></span>
-  <a href="#you">For you</a><a href="#agents">For agents</a><a href="#selfhost">Self-host</a><a href="/app">Open app →</a>
+  <a class="dlink" href="#you">For you</a><a class="dlink" href="#agents">For agents</a><a class="dlink" href="#selfhost">Self-host</a><a href="/app">Open app →</a>
 </div></nav>
 <div class="page">
 
+<section class="door active" id="home">
 <header class="hero">
   <span class="mark" aria-hidden="true">${MARK}</span>
   <h1>Your notes. Your agents' memory. One encrypted place.</h1>
@@ -146,8 +169,10 @@ export function landingShell(nonce: string): string {
   phrase is your whole identity — keys are derived in your browser or on your devices, never here.
   There is no password reset, because there is nothing here to reset.</div>
 </header>
+</section>
 
-<span class="k" id="you">Door 1 · For you</span>
+<section class="door" id="you">
+<span class="k">Door 1 · For you</span>
 <h2>Start in the browser, own it as files</h2>
 <ol class="steps">
   <li><div><a href="/app">Open the app</a> → <em>Create an account</em> → write down your 12 words. Start typing —
@@ -162,7 +187,9 @@ vortex-notes search "that idea"      <span class="c"># semantic search, fully lo
 in sync. Power users: the <code>identity</code>, <code>sync</code>, and <code>space</code> subcommands
 do each step individually, including pointing at a self-hosted relay.</p>
 
-<span class="k" id="agents">Door 2 · For your agents</span>
+</section>
+<section class="door" id="agents">
+<span class="k">Door 2 · For your agents</span>
 <h2>Agents are principals, not passengers</h2>
 <p>An agent gets <strong>its own key</strong> — generated on its machine, never transmitted —
 certified by yours, scoped to the spaces you grant, read-only if you say so. Every edit it makes
@@ -208,18 +235,39 @@ command prints the exact wiring line for your harness:</p>
 <code>build_context</code> · <code>recent_activity</code>. Revoke any agent:
 <code>vortex-notes agent revoke &lt;name&gt;</code>.</p>
 
-<span class="k" id="selfhost">Door 3 · Self-host</span>
+</section>
+<section class="door" id="selfhost">
+<span class="k">Door 3 · Self-host</span>
 <h2>Don't trust us — run your own</h2>
 <div class="codewrap"><pre>vortex-notes relay --port 7300 --db ~/relay.db</pre><button class="copy">copy</button></div>
 <p class="note">That's the entire server: it serves this page, the app, and an append-only log of
 encrypted blobs it cannot read. Point every command above at it with <code>--relay</code>. MIT licensed.</p>
+
+</section>
 
 <footer>Vortex Notes · MIT ·
   <a href="https://github.com/vortex-303/vortex-notes">GitHub</a> ·
   <a href="https://www.npmjs.com/package/vortex-notes">npm</a> ·
   zero plaintext on this server, by design</footer>
 </div>
+<nav class="tabbar" aria-label="Sections">
+  <button data-t="home" class="on">⌂<span>Home</span></button>
+  <button data-t="you">✎<span>For you</span></button>
+  <button data-t="agents">🤖<span>Agents</span></button>
+  <button data-t="selfhost">⚙<span>Self-host</span></button>
+</nav>
 <script nonce="${nonce}">
+var doorTabs = document.querySelectorAll(".tabbar button");
+doorTabs.forEach(function (b) {
+  b.addEventListener("click", function () {
+    document.querySelectorAll("section.door").forEach(function (sec) {
+      sec.classList.toggle("active", sec.id === b.dataset.t);
+    });
+    doorTabs.forEach(function (x) { x.classList.toggle("on", x === b); });
+    var open = document.querySelector("section.door.active");
+    if (open) open.scrollTop = 0;
+  });
+});
 document.querySelectorAll(".copy").forEach(function (btn) {
   btn.addEventListener("click", function () {
     var pre = btn.parentElement.querySelector("pre");
