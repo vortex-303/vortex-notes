@@ -24,6 +24,7 @@ import { verify, fromHex, toHex, utf8 } from "../crypto.js";
 import { verifyDeviceCert, verifyAgentChain, type DeviceCertPayload, type SignedCert } from "../account.js";
 import { landingShell } from "./landing.js";
 import { renderPublicPage, type PublicTheme } from "./publicpage.js";
+import { icon, ICON_CSS } from "../icons.js";
 import { marked } from "marked";
 
 const MAX_BODY = 8 * 1024 * 1024;
@@ -564,6 +565,57 @@ function appShell(_nonce: string): string {
   .iconbtn { background:none; border:1px solid var(--line); border-radius:6px; color:var(--ink-soft);
     height:27px; min-width:27px; cursor:pointer; font-size:0.85rem; padding:0 0.35rem; }
   .iconbtn:hover { border-color:var(--accent); color:var(--accent); }
+  ${ICON_CSS}
+  .iconbtn { display:inline-flex; align-items:center; justify-content:center; }
+  .iconbtn .ic { width:18px; height:18px; }
+  .menuitem .ic { width:16px; height:16px; color:var(--ink-faint); margin-right:0.1rem; }
+  .mbtn { display:inline-flex; align-items:center; gap:0.3rem; }
+  .mbtn .ic { width:15px; height:15px; }
+  .notemenu .menuitem { display:flex; align-items:center; gap:0.5rem; }
+  .notemenu .menuitem .ic { width:16px; height:16px; color:var(--ink-faint); }
+  .listlock { width:0.85em; height:0.85em; color:var(--ink-faint); vertical-align:-0.12em; }
+  .lockscreen .lockicon .ic { width:2rem; height:2rem; color:var(--ink-faint); }
+  .backbtn .ic { width:14px; height:14px; }
+  .menuitem:hover .ic, .menuitem:hover { color:var(--accent); }
+  /* bottom-left user menu */
+  .usermenuwrap { position:relative; border-top:1px solid var(--line); flex:none; }
+  .usertrigger { display:flex; align-items:center; gap:0.55rem; width:100%; padding:0.7rem 1rem;
+    background:none; border:none; cursor:pointer; color:var(--ink); text-align:left; }
+  .usertrigger:hover { background:var(--ground); }
+  .avatar { width:26px; height:26px; border-radius:7px; flex:none; overflow:hidden;
+    display:inline-flex; background:var(--accent-soft); }
+  .avatar svg { width:100%; height:100%; display:block; }
+  .uname { font:600 0.82rem var(--sans); margin-right:auto; overflow:hidden;
+    text-overflow:ellipsis; white-space:nowrap; max-width:12rem; }
+  .umore { color:var(--ink-faint); width:1rem; height:1rem; }
+  .usermenu { position:absolute; bottom:calc(100% + 4px); left:0.6rem; right:0.6rem; z-index:20;
+    background:var(--surface); border:1px solid var(--line); border-radius:11px;
+    box-shadow:0 12px 34px rgba(0,0,0,0.2); padding:0.25rem; }
+  .usermenu[hidden] { display:none; }
+  .umsection { padding:0.15rem; } .umsection + .umsection { border-top:1px solid var(--line); }
+  .usermenu .menuitem { display:flex; align-items:center; gap:0.6rem; width:100%; text-align:left;
+    background:none; border:none; color:var(--ink); font:0.85rem var(--sans); padding:0.55rem 0.7rem;
+    border-radius:7px; cursor:pointer; }
+  .usermenu .menuitem:hover { background:var(--accent-soft); }
+  .usermenu .menuitem.static { cursor:default; } .usermenu .menuitem.static:hover { background:none; }
+  .umval { margin-left:auto; color:var(--ink-faint); font:0.72rem var(--mono); }
+  .agentslist { display:flex; flex-direction:column; gap:0.5rem; margin:0.6rem 0; }
+  .agentrow { display:flex; align-items:center; gap:0.6rem; padding:0.6rem 0.7rem;
+    border:1px solid var(--line); border-radius:9px; }
+  .agentrow .ic { width:18px; height:18px; color:var(--ink-faint); }
+  .agentrow .an { font:600 0.85rem var(--sans); }
+  .agentrow .am { font:0.68rem var(--mono); color:var(--ink-faint); }
+  .agentrow .col { flex:1; min-width:0; } .agentrow .col > * { display:block; }
+  #agentsOverlay { position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:56;
+    display:flex; align-items:center; justify-content:center; padding:1rem; }
+  #agentsOverlay[hidden] { display:none; }
+  #agentsModal { background:var(--surface); border:1px solid var(--line); border-radius:14px;
+    max-width:27rem; width:100%; max-height:86dvh; overflow-y:auto; padding:1.1rem 1.25rem 1.25rem;
+    box-shadow:0 18px 50px rgba(0,0,0,0.35); }
+  @media (max-width:720px) {
+    #agentsOverlay { align-items:flex-end; padding:0; }
+    #agentsModal { border-radius:16px 16px 0 0; max-width:none; padding-bottom:calc(1.25rem + env(safe-area-inset-bottom)); }
+  }
   .menuwrap { position:relative; }
   .menu { position:absolute; right:0; top:calc(100% + 6px); z-index:20; min-width:11.5rem;
     background:var(--surface); border:1px solid var(--line); border-radius:10px;
@@ -796,32 +848,40 @@ function appShell(_nonce: string): string {
   <aside>
     <div class="bar">
       <div class="wordmark">${MARK_SVG}<span class="vx">Vortex</span> <span class="nx">Notes</span></div>
-      <button class="iconbtn" id="newBtn" title="New note">＋</button>
-      <div class="menuwrap">
-        <button class="iconbtn" id="menuBtn" title="Menu" aria-haspopup="true">⋯</button>
-        <div class="menu" id="menu" hidden>
-          <button class="menuitem" id="acctBtn">🔑&ensp;Account &amp; recovery</button>
-          <button class="menuitem" id="pairBtn">🤝&ensp;Pair an agent</button>
-          <button class="menuitem" id="tipsBtn">✎&ensp;Markdown tips</button>
-          <button class="menuitem" id="lockAllBtn">🔒&ensp;Lock all notes</button>
-          <button class="menuitem" id="refreshBtn">⟳&ensp;Pull latest</button>
-          <button class="menuitem" id="themeBtn">◐&ensp;Light / dark</button>
-          <button class="menuitem" id="lockBtn">🔒&ensp;Lock</button>
-        </div>
-      </div>
+      <button class="iconbtn" id="newBtn" title="New note">${icon("plus")}</button>
+      <button class="iconbtn" id="refreshBtn" title="Pull latest">${icon("refresh")}</button>
     </div>
     <input id="filter" placeholder="Filter notes…" autocomplete="off">
     <nav id="list"></nav>
-    <div class="dailybox">
-      <label for="daily">Daily note — press Enter</label>
-      <input id="daily" placeholder="Quick thought…" autocomplete="off">
+    <div class="usermenuwrap">
+      <div class="usermenu" id="userMenu" hidden>
+        <div class="umsection">
+          <button class="menuitem" id="nameBtn">${icon("user")}<span>Display name</span><span class="umval" id="umName"></span></button>
+          <button class="menuitem" id="acctBtn">${icon("key")}<span>Recovery phrase</span></button>
+          <div class="menuitem static">${icon("storage")}<span>Storage</span><span class="umval" id="umStorage">—</span></div>
+        </div>
+        <div class="umsection">
+          <button class="menuitem" id="agentsBtn">${icon("agent")}<span>Agents &amp; devices</span></button>
+        </div>
+        <div class="umsection">
+          <button class="menuitem" id="themeBtn">${icon("theme")}<span>Theme</span></button>
+          <button class="menuitem" id="tipsBtn">${icon("help")}<span>Markdown tips</span></button>
+          <button class="menuitem" id="lockAllBtn">${icon("lock")}<span>Lock all notes</span></button>
+          <button class="menuitem" id="lockBtn">${icon("signout")}<span>Sign out</span></button>
+        </div>
+      </div>
+      <button class="usertrigger" id="userBtn" aria-haspopup="true">
+        <span class="avatar" id="userAvatar"></span>
+        <span class="uname" id="userLabel">Account</span>
+        ${icon("more", "umore")}
+      </button>
     </div>
   </aside>
-  <main class="pane" id="pane"><div id="note"><div class="placeholder">Select a note, or create one with ＋</div></div></main>
+  <main class="pane" id="pane"><div id="note"><div class="placeholder">Select a note, or create one with the + button.</div></div></main>
 </div>
 <div id="acctOverlay" hidden>
   <div id="acctModal" role="dialog" aria-label="Account and recovery">
-    <div class="tipshead"><strong>Account &amp; recovery</strong><button class="iconbtn" id="acctClose" aria-label="Close">✕</button></div>
+    <div class="tipshead"><strong>Account &amp; recovery</strong><button class="iconbtn" id="acctClose" aria-label="Close">${icon("x")}</button></div>
     <p class="tipsintro">Account fingerprint <code id="acctFp"></code> — this confirms which account you're signed into.</p>
     <div class="acctphrase">
       <div class="acctlabel">Recovery phrase</div>
@@ -840,7 +900,7 @@ function appShell(_nonce: string): string {
 </div>
 <div id="pairOverlay" hidden>
   <div id="pairModal" role="dialog" aria-label="Pair an agent">
-    <div class="tipshead"><strong>Pair an agent</strong><button class="iconbtn" id="pairClose" aria-label="Close">✕</button></div>
+    <div class="tipshead"><strong>Pair an agent</strong><button class="iconbtn" id="pairClose" aria-label="Close">${icon("x")}</button></div>
     <div id="pairStep1">
       <p class="tipsintro">On the agent's machine, run
       <code>vortex-notes agent request --relay <span class="relayhost"></span> --name hermes</code>
@@ -858,9 +918,18 @@ function appShell(_nonce: string): string {
     <div id="pairStatus" class="tipsfoot"></div>
   </div>
 </div>
+<div id="agentsOverlay" hidden>
+  <div id="agentsModal" role="dialog" aria-label="Agents and devices">
+    <div class="tipshead"><strong>Agents &amp; devices</strong><button class="iconbtn" id="agentsClose" aria-label="Close">${icon("x")}</button></div>
+    <p class="tipsintro">Everything that can reach your notes. Each device and agent has its own key — revoke any anytime; your account is unaffected.</p>
+    <div id="agentsList" class="agentslist"></div>
+    <button id="pairBtn" class="pairgo" style="margin-top:0.8rem">${icon("plus")} Pair an agent</button>
+    <div id="agentsErr" class="lockerr"></div>
+  </div>
+</div>
 <div id="pubOverlay" hidden>
   <div id="pubModal" role="dialog" aria-label="Public link">
-    <div class="tipshead"><strong id="pubTitle">Make this note public</strong><button class="iconbtn" id="pubClose" aria-label="Close">✕</button></div>
+    <div class="tipshead"><strong id="pubTitle">Make this note public</strong><button class="iconbtn" id="pubClose" aria-label="Close">${icon("x")}</button></div>
     <p class="tipsintro">Anyone with the link can read it. A readable copy is stored on the server —
     that's what "public" means. Edits you make re-publish automatically; unpublish removes it.</p>
     <div class="acctlabel">Signed as</div>
@@ -886,7 +955,7 @@ function appShell(_nonce: string): string {
 </div>
 <div id="pwOverlay" hidden>
   <div id="pwModal" role="dialog" aria-label="Password">
-    <div class="tipshead"><strong id="pwTitle">Password</strong><button class="iconbtn" id="pwClose" aria-label="Close">✕</button></div>
+    <div class="tipshead"><strong id="pwTitle">Password</strong><button class="iconbtn" id="pwClose" aria-label="Close">${icon("x")}</button></div>
     <p id="pwHint" class="tipsintro"></p>
     <input id="pwInput" type="password" class="pairinput" placeholder="Password" autocomplete="new-password">
     <input id="pwConfirm" type="password" class="pairinput" placeholder="Confirm password" autocomplete="new-password" hidden>
@@ -898,7 +967,7 @@ function appShell(_nonce: string): string {
   <div id="tipsModal" role="dialog" aria-label="Markdown tips">
     <div class="tipshead">
       <strong>Writing basics</strong>
-      <button class="iconbtn" id="tipsClose" aria-label="Close">✕</button>
+      <button class="iconbtn" id="tipsClose" aria-label="Close">${icon("x")}</button>
     </div>
     <p class="tipsintro">Just type — formatting appears as you write. The raw marks only show on the line you're editing.</p>
     <table class="tipstable">

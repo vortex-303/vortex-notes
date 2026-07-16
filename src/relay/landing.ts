@@ -1,4 +1,5 @@
 /** The landing/docs page served at the relay root ("/"). Static, self-contained. */
+import { icon } from "../icons.js";
 
 const RELAY = "https://vortex-relay.fly.dev";
 
@@ -96,6 +97,8 @@ export function landingShell(nonce: string): string {
   .mocknote { flex:1; padding:1.3rem 1.5rem; position:relative; font-family:var(--serif); }
   .mocknote .mh1 { font:700 1.35rem var(--serif); letter-spacing:-0.01em; }
   .mocknote .mmeta { font:0.62rem var(--mono); color:var(--ink-faint); margin:0.3rem 0 1rem; }
+  .snote .mocklock { width:0.8em; height:0.8em; vertical-align:-0.1em; color:var(--ink-faint); }
+  .tabbar button .ic { width:20px; height:20px; }
   .ml { font:1rem/1.6 var(--serif); color:var(--ink); opacity:0; transform:translateY(3px);
     animation:reveal 13s infinite; }
   .ml.h2 { font-weight:700; font-size:1.1rem; margin-top:0.8rem; }
@@ -215,7 +218,7 @@ export function landingShell(nonce: string): string {
         <div class="sfolder">· personal</div>
         <div class="snote">Reading list</div>
         <div class="snote active">La Próxima Década</div>
-        <div class="snote">🔒 Diario</div>
+        <div class="snote">${icon("lock","mocklock")} Diario</div>
         <div class="sfolder">daily</div>
         <div class="snote">2026-07-16</div>
       </div>
@@ -319,10 +322,10 @@ encrypted blobs it cannot read. Point every command above at it with <code>--rel
   zero plaintext on this server, by design</footer>
 </div>
 <nav class="tabbar" aria-label="Sections">
-  <button data-t="home" class="on">⌂<span>Home</span></button>
-  <button data-t="you">✎<span>For you</span></button>
-  <button data-t="agents">🤖<span>Agents</span></button>
-  <button data-t="selfhost">⚙<span>Self-host</span></button>
+  <button data-t="home" class="on">${icon("read")}<span>Home</span></button>
+  <button data-t="you">${icon("edit")}<span>For you</span></button>
+  <button data-t="agents">${icon("agent")}<span>Agents</span></button>
+  <button data-t="selfhost">${icon("storage")}<span>Self-host</span></button>
 </nav>
 <script nonce="${nonce}">
 var doorTabs = document.querySelectorAll(".tabbar button");

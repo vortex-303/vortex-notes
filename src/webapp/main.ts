@@ -29,10 +29,12 @@ import {
   toHex,
   fromHex,
   utf8,
+  fingerprint,
 } from "../crypto.js";
 import { RelayClient } from "../relay/client.js";
 import { slugify, splitFrontmatter, titleFromRaw } from "../textutil.js";
 import { findEnvelope, isLockedContent, wrapLockedBody, LOCK_AAD } from "../notelock.js";
+import { icon } from "../icons.js";
 
 interface DocPayload {
   v: 1;
@@ -135,6 +137,7 @@ async function unlock(phrase: string, opts: { createSpaceIfEmpty?: boolean } = {
   } catch { /* offline is fine */ }
   $("#lock").style.display = "none";
   $("#main").style.display = "flex";
+  paintUserIdentity();
   pollTimer = window.setInterval(() => void refresh().catch(() => undefined), 30_000);
 }
 
@@ -197,11 +200,11 @@ function renderList(filter = ""): void {
     html += `<div class="folder">${esc(folder || "· root")}</div>`;
     for (const n of group) {
       // Title stays visible; a 🔒 badge marks that the content is protected.
-      const lock = isLockedContent(n.content) ? "🔒 " : "";
+      const lock = isLockedContent(n.content) ? icon("lock", "listlock") + " " : "";
       html += `<a href="#" data-path="${esc(n.path)}" class="${current === n.path ? "active" : ""}">${lock}${esc(noteTitle(n))}</a>`;
     }
   }
-  $("#list").innerHTML = html || '<div class="empty">Nothing here yet — create a note with ＋</div>';
+  $("#list").innerHTML = html || '<div class="empty">Nothing here yet — create a note with the + button</div>';
 }
 
 function setMobileNoteOpen(open: boolean): void {
@@ -314,7 +317,7 @@ function setFrontmatterTitle(content: string, title: string): string {
 function noteHead(n: DocPayload, buttons: string): string {
   return (
     `<div class="notehead"><div class="meta">` +
-    `<button class="mbtn backbtn" id="backBtn">‹ notes</button>` +
+    `<button class="mbtn backbtn" id="backBtn">${icon('back')} notes</button>` +
     `<span class="path">${esc(n.path)}</span><span id="savestate"></span>` +
     buttons +
     `</div><h1>${esc(noteTitle(n))}</h1>${metaDetailHtml(n.content)}</div>`
@@ -362,7 +365,7 @@ function openNote(path: string): void {
 function mountEditor(path: string, n: DocPayload, body: string, locked: boolean): void {
   lastSavedBody = body;
   $("#note").innerHTML =
-    noteHead(n, `<button class="mbtn" id="readBtn">read</button><button class="mbtn" id="moreBtn">⋯</button><button class="mbtn danger" id="delBtn">delete</button>`) +
+    noteHead(n, `<button class="mbtn" id="readBtn">read</button><button class="mbtn" id="moreBtn">${icon('more')}</button><button class="mbtn danger" id="delBtn">delete</button>`) +
     noteMenuHtml(locked, path) +
     `<div id="cm"></div>`;
   const scheduleSave = () => {
@@ -400,7 +403,7 @@ function showLockScreen(path: string, n: DocPayload, env: { salt: Uint8Array; ct
   $("#note").innerHTML =
     noteHead(n, `<button class="mbtn danger" id="delBtn">delete</button>`) +
     `<div class="lockscreen">` +
-    `<div class="lockicon">🔒</div>` +
+    `<div class="lockicon">${icon('lock')}</div>` +
     `<p>This note is password-protected.</p>` +
     `<input id="unlockPw" type="password" placeholder="Password" autocomplete="off">` +
     `<button id="unlockGo" class="mbtn primary">Unlock</button>` +
@@ -472,7 +475,7 @@ function openReader(path: string): void {
     }
   }
   $("#note").innerHTML =
-    noteHead(n, `<button class="mbtn primary" id="liveBtn">edit</button><button class="mbtn" id="moreBtn">⋯</button><button class="mbtn danger" id="delBtn">delete</button>`) +
+    noteHead(n, `<button class="mbtn primary" id="liveBtn">edit</button><button class="mbtn" id="moreBtn">${icon('more')}</button><button class="mbtn danger" id="delBtn">delete</button>`) +
     noteMenuHtml(env !== null, path) +
     `<article id="article" title="Tap to edit">${marked.parse(body, { async: false }) as string}</article>`;
   $("#liveBtn").addEventListener("click", () => openNote(path));
@@ -490,13 +493,13 @@ function noteMenuHtml(locked: boolean, path?: string): string {
   const isPublic = path ? publicMap.has(path) : false;
   return (
     `<div class="notemenu" id="noteMenu" hidden>` +
-    `<button class="menuitem" id="renameBtn">✎  Rename / move</button>` +
-    `<button class="menuitem" id="dupBtn">⧉  Duplicate</button>` +
+    `<button class="menuitem" id="renameBtn">${icon('edit')} Rename / move</button>` +
+    `<button class="menuitem" id="dupBtn">${icon('copy')} Duplicate</button>` +
     (locked
-      ? `<button class="menuitem" id="lockNowBtn">🔒  Lock now</button>` +
-        `<button class="menuitem" id="unlockPermBtn">🔓  Remove password</button>`
-      : `<button class="menuitem" id="lockBtnItem">🔒  Password-protect</button>` +
-        `<button class="menuitem" id="pubBtn">${isPublic ? "🌐  Public link…" : "🌐  Make public"}</button>`) +
+      ? `<button class="menuitem" id="lockNowBtn">${icon('lock')} Lock now</button>` +
+        `<button class="menuitem" id="unlockPermBtn">${icon('unlock')} Remove password</button>`
+      : `<button class="menuitem" id="lockBtnItem">${icon('lock')} Password-protect</button>` +
+        `<button class="menuitem" id="pubBtn">${icon('globe')} ${isPublic ? "Public link\u2026" : "Make public"}</button>`) +
     `</div>`
   );
 }
@@ -891,7 +894,6 @@ $("#list").addEventListener("click", (e) => {
   openNote((a as HTMLElement).dataset.path ?? "");
 });
 $("#newBtn").addEventListener("click", newNote);
-const menu = $("#menu");
 const tipsOverlay = $("#tipsOverlay");
 
 // --- pair an agent: full approval happens in this tab (we are a certified device) ---
@@ -1034,16 +1036,30 @@ tipsOverlay.addEventListener("click", (e) => {
 document.addEventListener("keydown", (e) => {
   if ((e as KeyboardEvent).key === "Escape" && !tipsOverlay.hidden) tipsOverlay.hidden = true;
 });
-$("#menuBtn").addEventListener("click", (e) => {
+// --- bottom-left user menu (opens upward) ---
+const userMenu = $("#userMenu");
+$("#userBtn").addEventListener("click", (e) => {
   e.stopPropagation();
-  menu.hidden = !(menu as HTMLElement & { hidden: boolean }).hidden;
+  const opening = (userMenu as HTMLElement & { hidden: boolean }).hidden;
+  if (opening) void refreshUserMenu();
+  (userMenu as HTMLElement & { hidden: boolean }).hidden = !opening;
 });
 document.addEventListener("click", (e) => {
-  if (!menu.hidden && !(e.target as HTMLElement).closest(".menuwrap")) menu.hidden = true;
+  if (!userMenu.hidden && !(e.target as HTMLElement).closest(".usermenuwrap")) userMenu.hidden = true;
 });
-menu.addEventListener("click", (e) => {
-  if ((e.target as HTMLElement).closest(".menuitem")) menu.hidden = true;
+userMenu.addEventListener("click", (e) => {
+  if ((e.target as HTMLElement).closest(".menuitem:not(.static)")) userMenu.hidden = true;
 });
+$("#nameBtn").addEventListener("click", () => {
+  const cur = localStorage.getItem("vn-authorname") ?? "";
+  const name = prompt("Display name (used on public notes):", cur);
+  if (name !== null) {
+    localStorage.setItem("vn-authorname", name.trim());
+    paintUserIdentity();
+  }
+});
+$("#agentsBtn").addEventListener("click", () => void openAgentsPanel());
+
 $("#refreshBtn").addEventListener("click", () => void refresh().catch((e) => alert((e as Error).message)));
 $("#filter").addEventListener("input", (e) => renderList((e.target as HTMLInputElement).value.trim().toLowerCase()));
 $("#lockBtn").addEventListener("click", () => {
@@ -1051,13 +1067,84 @@ $("#lockBtn").addEventListener("click", () => {
   clearInterval(pollTimer);
   location.reload();
 });
-$("#daily").addEventListener("keydown", (e) => {
-  const ev = e as KeyboardEvent;
-  if (ev.key !== "Enter") return;
-  const input = e.target as HTMLInputElement;
-  if (!input.value.trim()) return;
-  appendDaily(input.value);
-  input.value = "";
+
+/** Deterministic 5x5 mirrored identicon from the account key (flat, monochrome). */
+function identiconSvg(seedHex: string): string {
+  let cells = "";
+  for (let i = 0; i < 15; i++) {
+    const on = parseInt(seedHex[i % seedHex.length], 16) % 2 === 0;
+    if (!on) continue;
+    const col = Math.floor(i / 5), row = i % 5;
+    for (const c of [col, 4 - col]) cells += `<rect x="${c * 20}" y="${row * 20}" width="20" height="20"/>`;
+  }
+  return `<svg viewBox="0 0 100 100" fill="var(--accent)" xmlns="http://www.w3.org/2000/svg">${cells}</svg>`;
+}
+function paintUserIdentity(): void {
+  if (!identity) return;
+  $("#userAvatar").innerHTML = identiconSvg(identity.file.accountSignPub);
+  const name = localStorage.getItem("vn-authorname");
+  $("#userLabel").textContent = name || fingerprint(fromHex(identity.file.accountSignPub));
+  $("#umName").textContent = name || "not set";
+}
+async function refreshUserMenu(): Promise<void> {
+  paintUserIdentity();
+  if (!client) return;
+  try {
+    const u = await client.getUsage();
+    $("#umStorage").textContent = u.quotaBytes
+      ? `${(u.bytesUsed / 1e6).toFixed(1)} / ${Math.round(u.quotaBytes / 1e6)} MB`
+      : `${(u.bytesUsed / 1e6).toFixed(1)} MB`;
+  } catch {
+    $("#umStorage").textContent = "—";
+  }
+}
+
+// --- agents & devices panel ---
+const agentsOverlay = $("#agentsOverlay");
+async function openAgentsPanel(): Promise<void> {
+  if (!client) return;
+  $("#agentsErr").textContent = "";
+  $("#agentsList").innerHTML = '<div class="tipsintro">Loading…</div>';
+  agentsOverlay.hidden = false;
+  try {
+    const principals = await client.listPrincipals();
+    const rows = principals
+      .map((p) => {
+        const isSelf = p.signPub === identity?.file.device.signPub;
+        const kind = p.kind === "agent" ? "agent" : "device";
+        const scope = p.kind === "agent" ? `${p.mode === "ro" ? "read-only" : "read+write"} · ${(p.spaces ?? []).length} space${(p.spaces ?? []).length === 1 ? "" : "s"}` : "full access";
+        return (
+          `<div class="agentrow">${icon(kind)}` +
+          `<div class="col"><span class="an">${esc(p.name)}${isSelf ? " (this device)" : ""}</span>` +
+          `<span class="am">${esc(scope)} · ${p.signPub.slice(0, 10)}…</span></div>` +
+          (isSelf ? "" : `<button class="mbtn danger" data-revoke="${esc(p.signPub)}" data-name="${esc(p.name)}">Revoke</button>`) +
+          `</div>`
+        );
+      })
+      .join("");
+    $("#agentsList").innerHTML = rows || '<div class="tipsintro">No devices or agents yet.</div>';
+    $("#agentsList")
+      .querySelectorAll("[data-revoke]")
+      .forEach((b) =>
+        b.addEventListener("click", () => {
+          const pub = (b as HTMLElement).dataset.revoke!;
+          const name = (b as HTMLElement).dataset.name!;
+          if (!confirm(`Revoke "${name}"? It will lose access immediately.`)) return;
+          $("#agentsErr").textContent = "Revoking…";
+          void client!
+            .revokePrincipal(pub)
+            .then(() => openAgentsPanel())
+            .catch((e) => ($("#agentsErr").textContent = (e as Error).message));
+        })
+      );
+  } catch (e) {
+    $("#agentsList").innerHTML = "";
+    $("#agentsErr").textContent = (e as Error).message;
+  }
+}
+$("#agentsClose").addEventListener("click", () => (agentsOverlay.hidden = true));
+agentsOverlay.addEventListener("click", (e) => {
+  if (e.target === agentsOverlay) agentsOverlay.hidden = true;
 });
 
 window.addEventListener("beforeunload", () => {

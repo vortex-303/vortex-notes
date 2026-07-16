@@ -49,7 +49,7 @@ try {
   await page.fill("#pwConfirm", "notepw123");
   await page.click("#pwGo");
   await page.waitForTimeout(1500); // scrypt + save
-  check("note shows 🔒 + its real title in the list", (await page.textContent("#list")).includes("🔒 Diary"));
+  check("note shows a lock badge + its real title in the list", (await page.textContent("#list")).includes("Diary") && (await page.locator("#list .listlock").count()) > 0);
 
   // still unlocked in-session: content readable
   const inSession = await page.textContent("#cm .cm-content").catch(() => "");
@@ -78,7 +78,7 @@ try {
   await page.waitForSelector("#main", { state: "visible", timeout: 15000 });
 
   // open the locked note → password screen, content NOT shown
-  await page.getByText("🔒 Diary", { exact: true }).click();
+  await page.getByText("Diary", { exact: true }).click();
   await page.waitForSelector("#unlockPw", { timeout: 8000 });
   check("locked note shows the password screen after reload", await page.isVisible("#unlockPw"));
   check("unlock password input is masked (type=password)", (await page.getAttribute("#unlockPw", "type")) === "password");
@@ -100,7 +100,7 @@ try {
   check("correct password reveals the exact content (no data loss)", unlocked.includes(SECRET));
 
   // session-wide: the OTHER same-password note now opens without re-prompting
-  await page.click("text=Diary Two");
+  await page.getByText("Diary Two", { exact: true }).click();
   await page.waitForTimeout(600);
   const secondOpen = await page.isVisible("#unlockPw").catch(() => false);
   const secondBody = await page.textContent("#cm .cm-content, #note").catch(() => "");
