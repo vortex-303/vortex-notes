@@ -71,8 +71,46 @@ export function landingShell(nonce: string): string {
   @media (prefers-color-scheme: dark) { .cta { color:#10211C; } }
   .cta.ghost { background:none; color:var(--accent); border:1px solid var(--accent); }
 
-  .demo { display:block; width:100%; max-width:40rem; margin:1.8rem 0 0; border-radius:12px;
+  .demo { display:block; width:100%; max-width:40rem; margin:1.4rem 0 0; border-radius:12px;
     border:1px solid var(--line); }
+  .ctarow { display:flex; gap:0.7rem; flex-wrap:wrap; align-items:center; margin-bottom:0.4rem; }
+  .cta.big { font-size:1.02rem; padding:0.85rem 1.7rem; box-shadow:0 6px 20px rgba(20,115,92,0.28); }
+  .cta.big:hover { transform:translateY(-1px); }
+  nav.top a.navcta { background:var(--accent); color:#fff; padding:0.32rem 0.85rem; border-radius:999px; font-weight:600; }
+  [data-theme="dark"] nav.top a.navcta, @media (prefers-color-scheme: dark){ nav.top a.navcta { color:#10211C; } }
+
+  /* animated app mock */
+  .mock { margin:2rem 0 0; border:1px solid var(--line); border-radius:14px; overflow:hidden;
+    background:var(--surface); box-shadow:0 24px 60px rgba(0,0,0,0.14); max-width:41rem; }
+  .mockbar { display:flex; align-items:center; gap:0.4rem; padding:0.6rem 0.9rem; border-bottom:1px solid var(--line); }
+  .mockbar .dot { width:9px; height:9px; border-radius:50%; }
+  .dot.r{background:#E06B5C}.dot.y{background:#E0B65C}.dot.g{background:#5CC98A}
+  .mocktitle { margin-left:auto; margin-right:auto; display:flex; align-items:center; gap:0.35rem;
+    font:600 0.72rem var(--sans); color:var(--ink-soft); }
+  .mocktitle b{color:var(--accent)} .mocktitle svg{width:14px;height:14px;color:var(--accent)}
+  .mockbody { display:flex; min-height:270px; }
+  .mockside { width:34%; border-right:1px solid var(--line); padding:0.7rem 0.5rem; background:var(--ground); }
+  .sfolder { font:600 0.55rem var(--mono); letter-spacing:0.1em; text-transform:uppercase; color:var(--ink-faint); padding:0.5rem 0.5rem 0.25rem; }
+  .snote { font-size:0.78rem; color:var(--ink-soft); padding:0.28rem 0.5rem; border-radius:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .snote.active { background:var(--accent-soft); color:var(--accent); font-weight:600; }
+  .mocknote { flex:1; padding:1.3rem 1.5rem; position:relative; font-family:var(--serif); }
+  .mocknote .mh1 { font:700 1.35rem var(--serif); letter-spacing:-0.01em; }
+  .mocknote .mmeta { font:0.62rem var(--mono); color:var(--ink-faint); margin:0.3rem 0 1rem; }
+  .ml { font:1rem/1.6 var(--serif); color:var(--ink); opacity:0; transform:translateY(3px);
+    animation:reveal 13s infinite; }
+  .ml.h2 { font-weight:700; font-size:1.1rem; margin-top:0.8rem; }
+  .ml.b { color:var(--ink-soft); } .ml .bul { color:var(--accent); margin-right:0.4rem; }
+  .ml.agent { font-size:0.8rem; color:var(--ink-faint); margin-top:0.9rem; position:relative; padding-left:0.7rem; }
+  .ml.agent .tint { position:absolute; left:0; top:0.15em; bottom:0.15em; width:2px; background:var(--accent); border-radius:2px; }
+  .ml.agent .who { color:var(--accent); font-weight:600; }
+  .l1{animation-delay:0.4s}.l2{animation-delay:1.5s}.l3{animation-delay:2.8s}
+  .l4{animation-delay:3.8s}.l5{animation-delay:4.7s}.l6{animation-delay:6.0s}
+  @keyframes reveal { 0%,3%{opacity:0;transform:translateY(3px)} 8%,88%{opacity:1;transform:none} 94%,100%{opacity:0} }
+  .mcaret { display:inline-block; width:2px; height:1.05rem; background:var(--accent); vertical-align:-2px;
+    animation:cblink 1s steps(1) infinite; margin-left:1px; }
+  @keyframes cblink { 0%,49%{opacity:1} 50%,100%{opacity:0} }
+  @media (prefers-reduced-motion: reduce) { .ml{opacity:1;transform:none;animation:none} .mcaret{animation:none} }
+  @media (max-width:600px) { .mockbody{min-height:230px} .mockside{width:40%} .mocknote{padding:1rem} }
   .promise { margin:2rem 0 0; padding:0.95rem 1.15rem; background:var(--accent-soft);
     border-left:3px solid var(--accent); font-size:0.92rem; border-radius:0 8px 8px 0; color:var(--ink-soft); }
   .promise strong { color:var(--ink); }
@@ -154,7 +192,7 @@ export function landingShell(nonce: string): string {
 <body>
 <nav class="top"><div class="in">
   <span class="navmark"><span class="mark" aria-hidden="true">${MARK}</span><span><span class="vx">Vortex</span> Notes</span></span>
-  <a class="dlink" href="#you">For you</a><a class="dlink" href="#agents">For agents</a><a class="dlink" href="#selfhost">Self-host</a><a href="/app">Open app →</a>
+  <a class="dlink" href="#you">For you</a><a class="dlink" href="#agents">For agents</a><a class="dlink" href="#selfhost">Self-host</a><a class="navcta" href="/app">Open app →</a>
 </div></nav>
 <div class="page">
 
@@ -163,11 +201,37 @@ export function landingShell(nonce: string): string {
   <span class="mark" aria-hidden="true">${MARK}</span>
   <h1>Your notes. Your agents' memory. One encrypted place.</h1>
   <p class="tagline">Plain-markdown notes that you and your AI agents share — synced end-to-end
-  encrypted, searchable semantically on-device, editable everywhere with live-preview markdown.
+  encrypted, searchable on-device, editable everywhere with live-preview markdown.
   Agents get their own keys: scoped, attributed, revocable.</p>
-  <a class="cta" href="/app">Open the app</a>
-  <a class="cta ghost" href="https://www.npmjs.com/package/vortex-notes">Install the CLI</a>
-  <img class="demo" src="/demo.svg" alt="install, cross-lingual search, pair an agent" width="740">
+  <div class="ctarow">
+    <a class="cta big" href="/app">Open the app →</a>
+    <a class="cta ghost" href="https://www.npmjs.com/package/vortex-notes">Install the CLI</a>
+  </div>
+  <div class="mock" aria-hidden="true">
+    <div class="mockbar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+      <span class="mocktitle">${MARK}<b>Vortex</b> Notes</span></div>
+    <div class="mockbody">
+      <div class="mockside">
+        <div class="sfolder">· personal</div>
+        <div class="snote">Reading list</div>
+        <div class="snote active">La Próxima Década</div>
+        <div class="snote">🔒 Diario</div>
+        <div class="sfolder">daily</div>
+        <div class="snote">2026-07-16</div>
+      </div>
+      <div class="mocknote">
+        <div class="mh1">La Próxima Década</div>
+        <div class="mmeta">edited today · #poetry #future</div>
+        <div class="ml l1">La pantalla aún brilla, pero la mano ha cambiado —</div>
+        <div class="ml l2">ya no el amo, ya no el esclavo.</div>
+        <div class="ml h2 l3">Sobre el trabajo</div>
+        <div class="ml b l4"><span class="bul">•</span> una máquina aprende a pensar</div>
+        <div class="ml b l5"><span class="bul">•</span> y a fingir que recuerda</div>
+        <div class="ml agent l6"><span class="tint"></span>anotado por <span class="who">✦ hermes</span> · anoche</div>
+        <span class="mcaret"></span>
+      </div>
+    </div>
+  </div>
   <div class="promise"><strong>This server stores ciphertext only.</strong> Your 12-word recovery
   phrase is your whole identity — keys are derived in your browser or on your devices, never here.
   There is no password reset, because there is nothing here to reset.</div>
@@ -200,6 +264,7 @@ is signed as the agent. Revoking takes one tap.</p>
 
 <h3>Connect any agent machine — one command, nothing to configure</h3>
 <div class="codewrap"><pre>npx vortex-notes pair</pre><button class="copy">copy</button></div>
+    <img class="demo" src="/demo.svg" alt="install, cross-lingual search, pair an agent" width="740">
 <div class="pairviz">
   <span class="box"><b>agent machine</b>shows <span class="code">KM3PXR</span></span>
   <span class="arrow">→</span>
