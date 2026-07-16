@@ -70,12 +70,11 @@ try {
   await page.click("#pwGo");
   await page.waitForTimeout(1500);
 
-  // reload → fresh session (session keys gone; account needs the phrase)
+  // reload → account auto-unlocks from the device key (no phrase), but the
+  // per-note password session is cleared, so the locked note re-locks.
   await page.reload();
-  await page.waitForSelector("#phrase", { state: "visible" });
-  await page.fill("#phrase", phrase);
-  await page.click("#unlockBtn");
   await page.waitForSelector("#main", { state: "visible", timeout: 15000 });
+  check("account stays signed in across reload (no phrase re-prompt)", !(await page.isVisible("#phrase").catch(() => false)));
 
   // open the locked note → password screen, content NOT shown
   await page.getByText("Diary", { exact: true }).click();

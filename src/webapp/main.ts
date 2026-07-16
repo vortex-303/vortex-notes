@@ -86,7 +86,13 @@ function browserIdentity(phrase: string): PrincipalIdentity {
   const device = certifyDevice(account, deviceSign, deviceBox, `browser@${location.host}`);
   localStorage.setItem(
     "vn-device",
-    JSON.stringify({ account: toHex(account.sign.pub), signPriv: toHex(deviceSign.priv), boxPriv: toHex(deviceBox.priv), device })
+    JSON.stringify({
+      account: toHex(account.sign.pub),
+      accountEnc: toHex(account.box.pub),
+      signPriv: toHex(deviceSign.priv),
+      boxPriv: toHex(deviceBox.priv),
+      device,
+    })
   );
   return {
     file: { accountSignPub: toHex(account.sign.pub), accountEncPub: toHex(account.box.pub), device },
@@ -129,9 +135,25 @@ async function unlock(phrase: string, opts: { createSpaceIfEmpty?: boolean } = {
   if (!sealed) throw new Error("This space has no key sealed to your account.");
   spaceKey = openBox(fromHex(sealed), account.box);
   spaceId = chosen.id;
+  // Re-seal the space to THIS device so future visits auto-unlock without the
+  // phrase (a browser that joined an existing account has no device seal yet).
+  if (!chosen.sealedKeys[identity.file.device.signPub]) {
+    try {
+      const sealedKeys = {
+        ...chosen.sealedKeys,
+        [identity.file.device.signPub]: toHex(sealBox(spaceKey, identity.deviceBox.pub)),
+      };
+      await client.createSpace({ id: chosen.id, name: chosen.id, createdAt: chosen.createdAt, sealedKeys });
+    } catch { /* not fatal — auto-unlock just won't apply until next successful re-seal */ }
+  }
+  await enterApp();
+}
+
+/** Common tail once spaceKey/spaceId are set: load notes, show the app, start polling. */
+async function enterApp(): Promise<void> {
   await refresh();
   try {
-    for (const p of await client.listPublic()) {
+    for (const p of await client!.listPublic()) {
       publicMap.set(p.path, { slug: p.slug, author: p.author, theme: p.theme });
     }
   } catch { /* offline is fine */ }
@@ -139,6 +161,38 @@ async function unlock(phrase: string, opts: { createSpaceIfEmpty?: boolean } = {
   $("#main").style.display = "flex";
   paintUserIdentity();
   pollTimer = window.setInterval(() => void refresh().catch(() => undefined), 30_000);
+}
+
+/**
+ * Silent sign-in from the device key stored in localStorage — no phrase.
+ * The space key is sealed to this device, so we open it directly. Returns
+ * false if there's no stored device or it can't open any space (→ ask for phrase).
+ */
+async function autoUnlock(): Promise<boolean> {
+  const stored = localStorage.getItem("vn-device");
+  if (!stored) return false;
+  try {
+    const d = JSON.parse(stored) as { account: string; accountEnc?: string; signPriv: string; boxPriv: string; device: PrincipalIdentity["file"]["device"] };
+    if (!d.accountEnc) return false; // pre-upgrade device blob — fall back to phrase once
+    const id: PrincipalIdentity = {
+      file: { accountSignPub: d.account, accountEncPub: d.accountEnc, device: d.device },
+      deviceSign: signKeypairFromSeed(fromHex(d.signPriv)),
+      deviceBox: boxKeypairFromSeed(fromHex(d.boxPriv)),
+    };
+    const c = new RelayClient("", id);
+    await c.register();
+    const spaces = await c.listSpaces();
+    const chosen = spaces.find((sp) => sp.sealedKeys[id.file.device.signPub]);
+    if (!chosen) return false;
+    identity = id;
+    client = c;
+    spaceKey = openBox(fromHex(chosen.sealedKeys[id.file.device.signPub]), id.deviceBox);
+    spaceId = chosen.id;
+    await enterApp();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // ---------- sync ----------
@@ -1063,7 +1117,10 @@ $("#agentsBtn").addEventListener("click", () => void openAgentsPanel());
 $("#refreshBtn").addEventListener("click", () => void refresh().catch((e) => alert((e as Error).message)));
 $("#filter").addEventListener("input", (e) => renderList((e.target as HTMLInputElement).value.trim().toLowerCase()));
 $("#lockBtn").addEventListener("click", () => {
+  if (!confirm("Sign out on this device? You'll need your recovery phrase to sign back in.")) return;
   sessionPhrase = "";
+  sessionKeys.clear();
+  localStorage.removeItem("vn-device"); // forget the device key → next visit asks for the phrase
   clearInterval(pollTimer);
   location.reload();
 });
@@ -1160,3 +1217,15 @@ $("#themeBtn").addEventListener("click", () => {
   root.setAttribute("data-theme", next);
   localStorage.setItem("vn-theme", next);
 });
+
+// --- startup: stay signed in. Try the stored device key before asking for the phrase. ---
+const lockEl = $("#lock");
+if (localStorage.getItem("vn-device")) {
+  lockEl.style.visibility = "hidden"; // avoid a flash of the phrase screen
+  void autoUnlock()
+    .then((ok) => {
+      lockEl.style.visibility = "";
+      if (!ok) return; // no stored session worked → the phrase screen is already shown
+    })
+    .catch(() => (lockEl.style.visibility = ""));
+}
