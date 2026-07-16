@@ -68,11 +68,18 @@ function browserIdentity(phrase: string): PrincipalIdentity {
   if (stored) {
     const d = JSON.parse(stored) as {
       account: string;
+      accountEnc?: string;
       signPriv: string;
       boxPriv: string;
       device: PrincipalIdentity["file"]["device"];
     };
     if (d.account === toHex(account.sign.pub)) {
+      // Upgrade older blobs that predate the accountEnc field so future visits
+      // can auto-unlock without the phrase.
+      if (d.accountEnc !== toHex(account.box.pub)) {
+        d.accountEnc = toHex(account.box.pub);
+        localStorage.setItem("vn-device", JSON.stringify(d));
+      }
       return {
         file: { accountSignPub: d.account, accountEncPub: toHex(account.box.pub), device: d.device },
         deviceSign: signKeypairFromSeed(fromHex(d.signPriv)),

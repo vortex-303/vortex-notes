@@ -53,6 +53,33 @@ try {
   await page.waitForTimeout(1200);
   check("stays signed out after sign-out (phrase required)", await atLock());
 
+  // --- upgrade path: an old device blob missing accountEnc must self-heal on login ---
+  await page.goto(`${base}/app`);
+  await page.click("#showCreateBtn");
+  await page.waitForSelector("#newPhrase:not(:empty)");
+  const phrase2 = (await page.textContent("#newPhrase")).trim();
+  await page.check("#savedCheck");
+  await page.click("#createBtn");
+  await page.waitForSelector("#main", { state: "visible", timeout: 15000 });
+  // simulate a pre-upgrade blob: strip accountEnc
+  await page.evaluate(() => {
+    const d = JSON.parse(localStorage.getItem("vn-device"));
+    delete d.accountEnc;
+    localStorage.setItem("vn-device", JSON.stringify(d));
+  });
+  await page.reload();
+  await page.waitForTimeout(1200);
+  check("old blob (no accountEnc) falls back to the phrase screen", await atLock());
+  // log in → should upgrade the blob
+  await page.fill("#phrase", phrase2);
+  await page.click("#unlockBtn");
+  await page.waitForSelector("#main", { state: "visible", timeout: 15000 });
+  const healed = await page.evaluate(() => !!JSON.parse(localStorage.getItem("vn-device")).accountEnc);
+  check("login upgrades the blob (accountEnc restored)", healed);
+  await page.reload();
+  await page.waitForTimeout(1200);
+  check("after upgrade, reload auto-unlocks", (await page.isVisible("#main")) && !(await atLock()));
+
   check("no uncaught page errors", errors.length === 0);
   if (errors.length) console.log("  errors:", errors.slice(0, 3));
 } catch (e) {
