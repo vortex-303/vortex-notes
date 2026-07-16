@@ -51,37 +51,6 @@ class BulletWidget extends WidgetType {
   }
 }
 
-class FrontmatterWidget extends WidgetType {
-  toDOM(view: EditorView): HTMLElement {
-    const el = document.createElement("div");
-    el.className = "cm-frontmatter";
-    el.textContent = "⋯ properties";
-    el.title = "Tap to edit frontmatter";
-    el.onmousedown = (e) => {
-      e.preventDefault();
-      view.dispatch({ selection: { anchor: Math.min(4, view.state.doc.length) } });
-      view.focus();
-    };
-    return el;
-  }
-  eq(): boolean {
-    return true;
-  }
-  ignoreEvent(): boolean {
-    return false;
-  }
-}
-
-function frontmatterRange(view: EditorView): { from: number; to: number } | null {
-  const doc = view.state.doc;
-  if (doc.lines < 2 || doc.line(1).text !== "---") return null;
-  const limit = Math.min(doc.lines, 60);
-  for (let i = 2; i <= limit; i++) {
-    if (doc.line(i).text === "---") return { from: 0, to: doc.line(i).to };
-  }
-  return null;
-}
-
 function buildDecorations(view: EditorView): DecorationSet {
   const { state } = view;
   const decos: Range<Decoration>[] = [];
@@ -95,18 +64,14 @@ function buildDecorations(view: EditorView): DecorationSet {
     for (let i = a; i <= b; i++) activeLines.add(i);
   }
 
-  const fm = frontmatterRange(view);
-  const fmCollapsed = fm !== null && selMin > fm.to;
-  if (fm && fmCollapsed) {
-    decos.push(Decoration.replace({ widget: new FrontmatterWidget(), block: true }).range(fm.from, fm.to));
-  }
-
+  // Frontmatter is stripped from the editor doc by the caller (edited as the
+  // body only), so there is no frontmatter block to collapse here — and block
+  // decorations from a ViewPlugin are forbidden by CodeMirror anyway.
   for (const { from, to } of view.visibleRanges) {
     syntaxTree(state).iterate({
       from,
       to,
       enter: (n) => {
-        if (fm && fmCollapsed && n.to <= fm.to) return;
         const lineNo = state.doc.lineAt(n.from).number;
 
         if (n.name === "ListMark") {
@@ -129,7 +94,6 @@ function buildDecorations(view: EditorView): DecorationSet {
     for (const m of text.matchAll(/\[\[([^\][]+?)\]\]/g)) {
       const s = from + (m.index ?? 0);
       const e = s + m[0].length;
-      if (fm && fmCollapsed && e <= fm.to) continue;
       const lineNo = state.doc.lineAt(s).number;
       if (!activeLines.has(lineNo)) {
         decos.push(Decoration.replace({}).range(s, s + 2));

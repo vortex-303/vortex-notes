@@ -20,7 +20,8 @@
     "pretest": "tsc -p tsconfig.test.json",
     "build:web": "esbuild src/webapp/main.ts --bundle --minify --format=iife --platform=browser --outfile=dist/webapp/bundle.js",
     "prepublishOnly": "npm run build",
-    "build:assets": "mkdir -p dist/assets && cp assets/demo.svg dist/assets/demo.svg"
+    "build:assets": "mkdir -p dist/assets && cp assets/demo.svg dist/assets/demo.svg",
+    "test:e2e": "npm run build && node test/e2e-webapp.mjs"
   },
   "keywords": [
     "mcp",
@@ -53,6 +54,7 @@
     "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.10.0",
     "esbuild": "^0.28.1",
+    "playwright": "^1.61.1",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0"
   },

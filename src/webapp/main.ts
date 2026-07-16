@@ -201,6 +201,14 @@ function setMobileNoteOpen(open: boolean): void {
 let saveTimer: number | undefined;
 let lastSaved = "";
 let saveState: "idle" | "dirty" | "saving" = "idle";
+// The frontmatter block for the note currently open in the editor. The editor
+// edits the BODY only; on save we prepend this back. Empty if no frontmatter.
+let editorFmPrefix = "";
+
+/** Full content = the stashed frontmatter + whatever the editor holds (body). */
+function editorContent(): string {
+  return editorFmPrefix + (editor ? editor.state.doc.toString() : "");
+}
 
 function setSaveState(text: string): void {
   const el = document.getElementById("savestate");
@@ -209,7 +217,7 @@ function setSaveState(text: string): void {
 
 async function flushSave(path: string): Promise<void> {
   if (!editor) return;
-  const content = editor.state.doc.toString();
+  const content = editorContent();
   if (content === lastSaved) return;
   saveState = "saving";
   setSaveState("saving…");
@@ -297,6 +305,15 @@ function openNote(path: string): void {
   void closeEditor();
   current = path;
   lastSaved = n.content;
+  const fmEnd = frontmatterEnd(n.content);
+  let prefix = n.content.slice(0, fmEnd);
+  let body = n.content.slice(fmEnd);
+  const lead = body.match(/^\n+/); // move blank lines after frontmatter into the prefix
+  if (lead) {
+    prefix += lead[0];
+    body = body.slice(lead[0].length);
+  }
+  editorFmPrefix = prefix; // editorContent() = prefix + body === original, exactly
   $("#note").innerHTML =
     noteHead(n, `<button class="mbtn" id="readBtn">read</button><button class="mbtn" id="moreBtn">⋯</button><button class="mbtn danger" id="delBtn">delete</button>`) +
     noteMenuHtml() +
@@ -308,10 +325,10 @@ function openNote(path: string): void {
     saveTimer = window.setTimeout(() => void flushSave(path), 1200);
   };
   editor = new EditorView({
-    doc: n.content,
-    // Start the cursor past the frontmatter so it renders collapsed
-    // ("⋯ properties") instead of dumping raw YAML in big type.
-    selection: { anchor: Math.min(frontmatterEnd(n.content), n.content.length) },
+    // Body only — frontmatter (id/dates/tags) shows as the detail line under
+    // the title and is reattached on save. Keeps the editor clean and avoids
+    // rendering raw YAML.
+    doc: body,
     parent: $("#cm"),
     extensions: [
       minimalSetup,
@@ -440,9 +457,10 @@ async function closeEditor(): Promise<void> {
   window.clearTimeout(saveTimer);
   if (editor && current) {
     const path = current;
-    const content = editor.state.doc.toString();
+    const content = editorContent();
     editor.destroy();
     editor = null;
+    editorFmPrefix = "";
     if (content !== lastSaved) {
       try {
         await pushNote(path, content);
@@ -454,6 +472,7 @@ async function closeEditor(): Promise<void> {
   } else {
     editor?.destroy();
     editor = null;
+    editorFmPrefix = "";
   }
 }
 
