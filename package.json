@@ -21,7 +21,7 @@
     "build:web": "esbuild src/webapp/main.ts --bundle --minify --format=iife --platform=browser --outfile=dist/webapp/bundle.js",
     "prepublishOnly": "npm run build",
     "build:assets": "mkdir -p dist/assets && cp assets/demo.svg dist/assets/demo.svg",
-    "test:e2e": "npm run build && node test/e2e-webapp.mjs"
+    "test:e2e": "npm run build && node test/e2e-webapp.mjs && node test/e2e-lock.mjs"
   },
   "keywords": [
     "mcp",

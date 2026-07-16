@@ -503,6 +503,14 @@ function appShell(_nonce: string): string {
   .notehead .meta .path { margin-right:auto; }
   .notehead h1 { font:700 2rem/1.15 var(--serif); letter-spacing:-0.015em; margin:0.4rem 0 0; }
   .notemeta { font:0.72rem/1.5 var(--mono); color:var(--ink-faint); margin-top:0.45rem; letter-spacing:0.02em; }
+  .lockscreen { text-align:center; margin-top:14vh; display:flex; flex-direction:column;
+    align-items:center; gap:0.8rem; }
+  .lockscreen .lockicon { font-size:2.2rem; }
+  .lockscreen p { color:var(--ink-soft); margin:0; }
+  .lockscreen input { width:min(20rem,80vw); padding:0.6rem 0.9rem; border:1px solid var(--line);
+    border-radius:8px; background:var(--surface); color:var(--ink); font:1rem var(--sans); outline:none; text-align:center; }
+  .lockscreen input:focus { border-color:var(--accent); }
+  .lockerr { font:0.8rem var(--mono); color:var(--danger); min-height:1.2em; }
   .notemenu { position:absolute; z-index:20; margin-top:0.3rem; min-width:12rem;
     background:var(--surface); border:1px solid var(--line); border-radius:10px;
     box-shadow:0 8px 28px rgba(0,0,0,0.18); padding:0.35rem; }

@@ -17,6 +17,8 @@ import {
   randomKey,
   sealBox,
   toB64,
+  fromB64,
+  deriveNoteKey,
   randomSignKeypair,
   randomBoxKeypair,
   signKeypairFromSeed,
@@ -188,7 +190,8 @@ function renderList(filter = ""): void {
   for (const [folder, group] of [...groups.entries()].sort()) {
     html += `<div class="folder">${esc(folder || "· root")}</div>`;
     for (const n of group) {
-      html += `<a href="#" data-path="${esc(n.path)}" class="${current === n.path ? "active" : ""}">${esc(noteTitle(n))}</a>`;
+      const lock = isLockedContent(n.content) ? "🔒 " : "";
+      html += `<a href="#" data-path="${esc(n.path)}" class="${current === n.path ? "active" : ""}">${lock}${esc(noteTitle(n))}</a>`;
     }
   }
   $("#list").innerHTML = html || '<div class="empty">Nothing here yet — create a note with ＋</div>';
@@ -204,10 +207,42 @@ let saveState: "idle" | "dirty" | "saving" = "idle";
 // The frontmatter block for the note currently open in the editor. The editor
 // edits the BODY only; on save we prepend this back. Empty if no frontmatter.
 let editorFmPrefix = "";
+// The editor's body content as last persisted. We compare bodies (not full
+// content) so re-encrypting a locked note doesn't look like an edit.
+let lastSavedBody = "";
+// Password-lock context for the currently-open note (null = not locked).
+let lockedCtx: { key: Uint8Array; salt: Uint8Array } | null = null;
+// Session cache of note passwords: unlocked notes stay unlocked until reload/lock.
+const sessionKeys = new Map<string, { key: Uint8Array; salt: Uint8Array }>();
 
-/** Full content = the stashed frontmatter + whatever the editor holds (body). */
+const LOCK_MARK = "vortex-locked:v1:";
+const LOCK_AAD = "vortex-note-lock-v1";
+
+/** Find the encrypted envelope in a note body, if the note is password-locked. */
+function findEnvelope(body: string): { salt: Uint8Array; ct: Uint8Array } | null {
+  const m = body.match(/^vortex-locked:v1:([A-Za-z0-9+/=]+):([A-Za-z0-9+/=]+)\s*$/m);
+  if (!m) return null;
+  try {
+    return { salt: fromB64(m[1]), ct: fromB64(m[2]) };
+  } catch {
+    return null;
+  }
+}
+
+function isLockedContent(content: string): boolean {
+  return findEnvelope(splitFrontmatter(content).body) !== null;
+}
+
+/** Build a locked body: human hint + the encrypted envelope of the plaintext. */
+function wrapLocked(salt: Uint8Array, key: Uint8Array, plainBody: string): string {
+  const ct = encryptPayload(key, utf8(plainBody), LOCK_AAD);
+  return "🔒 Password-protected — open in Vortex Notes to unlock.\n\n" + LOCK_MARK + toB64(salt) + ":" + toB64(ct);
+}
+
+/** Full content to persist = stashed frontmatter + (re-encrypted) editor body. */
 function editorContent(): string {
-  return editorFmPrefix + (editor ? editor.state.doc.toString() : "");
+  const bodyNow = editor ? editor.state.doc.toString() : "";
+  return editorFmPrefix + (lockedCtx ? wrapLocked(lockedCtx.salt, lockedCtx.key, bodyNow) : bodyNow);
 }
 
 function setSaveState(text: string): void {
@@ -217,12 +252,14 @@ function setSaveState(text: string): void {
 
 async function flushSave(path: string): Promise<void> {
   if (!editor) return;
+  const bodyNow = editor.state.doc.toString();
+  if (bodyNow === lastSavedBody) return; // compare plaintext body, not (re-encrypted) content
   const content = editorContent();
-  if (content === lastSaved) return;
   saveState = "saving";
   setSaveState("saving…");
   try {
     await pushNote(path, content);
+    lastSavedBody = bodyNow;
     lastSaved = content;
     saveState = "idle";
     setSaveState("saved");
@@ -305,6 +342,24 @@ function openNote(path: string): void {
   void closeEditor();
   current = path;
   lastSaved = n.content;
+  const env = findEnvelope(splitFrontmatter(n.content).body);
+  if (env) {
+    const cached = sessionKeys.get(path);
+    if (!cached) return showLockScreen(path, n, env);
+    let plain: string;
+    try {
+      plain = new TextDecoder().decode(decryptPayload(cached.key, env.ct, LOCK_AAD));
+    } catch {
+      sessionKeys.delete(path);
+      return showLockScreen(path, n, env);
+    }
+    lockedCtx = { key: cached.key, salt: cached.salt };
+    // Frontmatter prefix ends with the closing '---\n'; a blank line then the body.
+    editorFmPrefix = n.content.slice(0, frontmatterEnd(n.content)) + "\n";
+    mountEditor(path, n, plain, true);
+    return;
+  }
+  lockedCtx = null;
   const fmEnd = frontmatterEnd(n.content);
   let prefix = n.content.slice(0, fmEnd);
   let body = n.content.slice(fmEnd);
@@ -314,9 +369,15 @@ function openNote(path: string): void {
     body = body.slice(lead[0].length);
   }
   editorFmPrefix = prefix; // editorContent() = prefix + body === original, exactly
+  mountEditor(path, n, body, false);
+}
+
+/** Shared editor mount used by normal and unlocked-locked notes. */
+function mountEditor(path: string, n: DocPayload, body: string, locked: boolean): void {
+  lastSavedBody = body;
   $("#note").innerHTML =
     noteHead(n, `<button class="mbtn" id="readBtn">read</button><button class="mbtn" id="moreBtn">⋯</button><button class="mbtn danger" id="delBtn">delete</button>`) +
-    noteMenuHtml() +
+    noteMenuHtml(locked) +
     `<div id="cm"></div>`;
   const scheduleSave = () => {
     saveState = "dirty";
@@ -325,9 +386,6 @@ function openNote(path: string): void {
     saveTimer = window.setTimeout(() => void flushSave(path), 1200);
   };
   editor = new EditorView({
-    // Body only — frontmatter (id/dates/tags) shows as the detail line under
-    // the title and is reattached on save. Keeps the editor clean and avoids
-    // rendering raw YAML.
     doc: body,
     parent: $("#cm"),
     extensions: [
@@ -349,16 +407,73 @@ function openNote(path: string): void {
   $("#pane").scrollTop = 0;
 }
 
+/** Prompt for the note password; on success cache it and reopen unlocked. */
+function showLockScreen(path: string, n: DocPayload, env: { salt: Uint8Array; ct: Uint8Array }): void {
+  lockedCtx = null;
+  current = path;
+  $("#note").innerHTML =
+    noteHead(n, `<button class="mbtn danger" id="delBtn">delete</button>`) +
+    `<div class="lockscreen">` +
+    `<div class="lockicon">🔒</div>` +
+    `<p>This note is password-protected.</p>` +
+    `<input id="unlockPw" type="password" placeholder="Password" autocomplete="off">` +
+    `<button id="unlockGo" class="mbtn primary">Unlock</button>` +
+    `<div id="unlockErr" class="lockerr"></div></div>`;
+  const attempt = () => {
+    const pw = ($("#unlockPw") as HTMLInputElement).value;
+    if (!pw) return;
+    $("#unlockErr").textContent = "Unlocking…";
+    // scrypt is heavy; defer a tick so the label paints.
+    window.setTimeout(() => {
+      try {
+        const key = deriveNoteKey(pw, env.salt);
+        decryptPayload(key, env.ct, LOCK_AAD); // throws if wrong password
+        sessionKeys.set(path, { key, salt: env.salt });
+        openNote(path);
+      } catch {
+        $("#unlockErr").textContent = "Wrong password.";
+      }
+    }, 20);
+  };
+  $("#unlockGo").addEventListener("click", attempt);
+  ($("#unlockPw") as HTMLInputElement).addEventListener("keydown", (e) => {
+    if ((e as KeyboardEvent).key === "Enter") attempt();
+  });
+  $("#delBtn").addEventListener("click", () => {
+    if (!confirm(`Delete ${path} everywhere?`)) return;
+    void deleteNote(path).then(() => {
+      current = null;
+      $("#note").innerHTML = '<div class="placeholder">Deleted.</div>';
+      setMobileNoteOpen(false);
+      renderList();
+    });
+  });
+  ($("#unlockPw") as HTMLInputElement).focus();
+  setMobileNoteOpen(true);
+  renderList(($("#filter") as HTMLInputElement).value.trim().toLowerCase());
+}
+
 /** Reading view: fully rendered markdown; tap the text to go back to live editing. */
 function openReader(path: string): void {
   const n = notes.get(path);
   if (!n) return;
   void closeEditor();
   current = path;
-  const { body } = splitFrontmatter(n.content);
+  let { body } = splitFrontmatter(n.content);
+  const env = findEnvelope(body);
+  if (env) {
+    const cached = sessionKeys.get(path);
+    if (!cached) return showLockScreen(path, n, env);
+    try {
+      body = new TextDecoder().decode(decryptPayload(cached.key, env.ct, LOCK_AAD));
+    } catch {
+      sessionKeys.delete(path);
+      return showLockScreen(path, n, env);
+    }
+  }
   $("#note").innerHTML =
     noteHead(n, `<button class="mbtn primary" id="liveBtn">edit</button><button class="mbtn" id="moreBtn">⋯</button><button class="mbtn danger" id="delBtn">delete</button>`) +
-    noteMenuHtml() +
+    noteMenuHtml(env !== null) +
     `<article id="article" title="Tap to edit">${marked.parse(body, { async: false }) as string}</article>`;
   $("#liveBtn").addEventListener("click", () => openNote(path));
   $("#article").addEventListener("click", (e) => {
@@ -371,13 +486,46 @@ function openReader(path: string): void {
   $("#pane").scrollTop = 0;
 }
 
-function noteMenuHtml(): string {
+function noteMenuHtml(locked: boolean): string {
   return (
     `<div class="notemenu" id="noteMenu" hidden>` +
     `<button class="menuitem" id="renameBtn">✎  Rename / move</button>` +
     `<button class="menuitem" id="dupBtn">⧉  Duplicate</button>` +
+    (locked
+      ? `<button class="menuitem" id="unlockPermBtn">🔓  Remove password</button>`
+      : `<button class="menuitem" id="lockBtnItem">🔒  Password-protect</button>`) +
     `</div>`
   );
+}
+
+/** Lock the currently-open note with a new password (must be open/unlocked). */
+async function lockNote(path: string): Promise<void> {
+  if (!editor) return;
+  const pw = prompt("Set a password for this note. If you lose it, the note is unrecoverable.");
+  if (!pw) return;
+  if (prompt("Confirm the password:") !== pw) {
+    alert("Passwords didn't match.");
+    return;
+  }
+  const salt = randomKey(); // 32-byte scrypt salt
+  const key = deriveNoteKey(pw, salt);
+  const plainBody = editor.state.doc.toString();
+  lockedCtx = { key, salt };
+  sessionKeys.set(path, { key, salt });
+  lastSavedBody = plainBody; // body itself unchanged; only its stored form is now encrypted
+  await pushNote(path, editorContent());
+  lastSaved = notes.get(path)?.content ?? "";
+  openNote(path);
+}
+
+/** Remove the password from the currently-open (unlocked) note. */
+async function unlockPermanent(path: string): Promise<void> {
+  if (!editor) return;
+  const plainBody = editor.state.doc.toString();
+  lockedCtx = null;
+  sessionKeys.delete(path);
+  await pushNote(path, editorFmPrefix + plainBody);
+  openNote(path);
 }
 
 async function renameNote(oldPath: string): Promise<void> {
@@ -437,6 +585,8 @@ function wireCommonNoteButtons(path: string): void {
     });
     $("#renameBtn").addEventListener("click", () => void renameNote(path).catch((e) => alert((e as Error).message)));
     $("#dupBtn").addEventListener("click", () => void duplicateNote(path).catch((e) => alert((e as Error).message)));
+    document.getElementById("lockBtnItem")?.addEventListener("click", () => void lockNote(path).catch((e) => alert((e as Error).message)));
+    document.getElementById("unlockPermBtn")?.addEventListener("click", () => void unlockPermanent(path).catch((e) => alert((e as Error).message)));
   }
   $("#delBtn").addEventListener("click", () => {
     if (!confirm(`Delete ${path} everywhere?`)) return;
@@ -457,11 +607,13 @@ async function closeEditor(): Promise<void> {
   window.clearTimeout(saveTimer);
   if (editor && current) {
     const path = current;
+    const bodyNow = editor.state.doc.toString();
     const content = editorContent();
     editor.destroy();
     editor = null;
     editorFmPrefix = "";
-    if (content !== lastSaved) {
+    lockedCtx = null;
+    if (bodyNow !== lastSavedBody) {
       try {
         await pushNote(path, content);
         lastSaved = content;
@@ -473,6 +625,7 @@ async function closeEditor(): Promise<void> {
     editor?.destroy();
     editor = null;
     editorFmPrefix = "";
+    lockedCtx = null;
   }
 }
 

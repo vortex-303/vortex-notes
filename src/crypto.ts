@@ -16,9 +16,18 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import { randomBytes } from "@noble/hashes/utils.js";
 import { ed25519, x25519 } from "@noble/curves/ed25519.js";
 import { xchacha20poly1305 } from "@noble/ciphers/chacha.js";
+import { scrypt } from "@noble/hashes/scrypt.js";
 
 export const KEY_LEN = 32;
 const NONCE_LEN = 24;
+
+/**
+ * Derive a 32-byte key from a user password (for per-note passphrase locks).
+ * scrypt is memory-hard; params ~ 30MB / a few hundred ms in a browser.
+ */
+export function deriveNoteKey(password: string, salt: Uint8Array): Uint8Array {
+  return scrypt(utf8(password), salt, { N: 2 ** 15, r: 8, p: 1, dkLen: KEY_LEN });
+}
 
 export interface SignKeypair {
   priv: Uint8Array; // 32-byte seed
