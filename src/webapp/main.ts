@@ -419,8 +419,7 @@ function openNote(path: string): void {
 function mountEditor(path: string, n: DocPayload, body: string, locked: boolean): void {
   lastSavedBody = body;
   $("#note").innerHTML =
-    noteHead(n, `<button class="mbtn" id="readBtn">read</button><button class="mbtn" id="moreBtn">${icon('more')}</button><button class="mbtn danger" id="delBtn">delete</button>`) +
-    noteMenuHtml(locked, path) +
+    noteHead(n, `<button class="mbtn" id="readBtn">read</button><span class="moremenu"><button class="mbtn" id="moreBtn">${icon('more')}</button>${noteMenuHtml(locked, path)}</span><button class="mbtn danger" id="delBtn">delete</button>`) +
     `<div id="cm"></div>`;
   const scheduleSave = () => {
     saveState = "dirty";
@@ -529,8 +528,7 @@ function openReader(path: string): void {
     }
   }
   $("#note").innerHTML =
-    noteHead(n, `<button class="mbtn primary" id="liveBtn">edit</button><button class="mbtn" id="moreBtn">${icon('more')}</button><button class="mbtn danger" id="delBtn">delete</button>`) +
-    noteMenuHtml(env !== null, path) +
+    noteHead(n, `<button class="mbtn primary" id="liveBtn">edit</button><span class="moremenu"><button class="mbtn" id="moreBtn">${icon('more')}</button>${noteMenuHtml(env !== null, path)}</span><button class="mbtn danger" id="delBtn">delete</button>`) +
     `<article id="article" title="Tap to edit">${marked.parse(body, { async: false }) as string}</article>`;
   $("#liveBtn").addEventListener("click", () => openNote(path));
   $("#article").addEventListener("click", (e) => {

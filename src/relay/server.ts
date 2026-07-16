@@ -146,6 +146,7 @@ export async function startRelay(
       res.writeHead(200, {
         "Content-Type": "text/html; charset=utf-8",
         "Content-Security-Policy": `default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'`,
+        "Cache-Control": "no-cache",
       });
       return void res.end(appShell(nonce));
     }
@@ -180,7 +181,7 @@ export async function startRelay(
         path.join(process.cwd(), "dist/webapp/bundle.js"), // test builds
       ].find((p) => fs.existsSync(p));
       if (!bundle) return sendJson(res, 404, { error: "Web app bundle not built (npm run build)" });
-      res.writeHead(200, { "Content-Type": "text/javascript; charset=utf-8" });
+      res.writeHead(200, { "Content-Type": "text/javascript; charset=utf-8", "Cache-Control": "no-cache" });
       return void res.end(fs.readFileSync(bundle));
     }
 
@@ -659,7 +660,8 @@ function appShell(_nonce: string): string {
     border-radius:8px; background:var(--surface); color:var(--ink); font:1rem var(--sans); outline:none; text-align:center; }
   .lockscreen input:focus { border-color:var(--accent); }
   .lockerr { font:0.8rem var(--mono); color:var(--danger); min-height:1.2em; }
-  .notemenu { position:absolute; z-index:20; margin-top:0.3rem; min-width:12rem;
+  .moremenu { position:relative; display:inline-flex; }
+  .notemenu { position:absolute; top:calc(100% + 6px); right:0; z-index:20; min-width:12rem;
     background:var(--surface); border:1px solid var(--line); border-radius:10px;
     box-shadow:0 8px 28px rgba(0,0,0,0.18); padding:0.35rem; }
   .notemenu[hidden] { display:none; }
