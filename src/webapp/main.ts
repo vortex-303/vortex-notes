@@ -191,6 +191,7 @@ function renderList(filter = ""): void {
   for (const [folder, group] of [...groups.entries()].sort()) {
     html += `<div class="folder">${esc(folder || "· root")}</div>`;
     for (const n of group) {
+      // Title stays visible; a 🔒 badge marks that the content is protected.
       const lock = isLockedContent(n.content) ? "🔒 " : "";
       html += `<a href="#" data-path="${esc(n.path)}" class="${current === n.path ? "active" : ""}">${lock}${esc(noteTitle(n))}</a>`;
     }
@@ -406,6 +407,20 @@ function showLockScreen(path: string, n: DocPayload, env: { salt: Uint8Array; ct
         const key = deriveNoteKey(pw, env.salt);
         decryptPayload(key, env.ct, LOCK_AAD); // throws if wrong password
         sessionKeys.set(path, { key, salt: env.salt });
+        // Apple-Notes-style: reveal every other note that shares this password
+        // for the rest of the session (each has its own salt, so re-derive).
+        for (const [p, nn] of notes) {
+          if (p === path || sessionKeys.has(p)) continue;
+          const e2 = findEnvelope(splitFrontmatter(nn.content).body);
+          if (!e2) continue;
+          try {
+            const k2 = deriveNoteKey(pw, e2.salt);
+            decryptPayload(k2, e2.ct, LOCK_AAD);
+            sessionKeys.set(p, { key: k2, salt: e2.salt });
+          } catch {
+            /* different password — leave it locked */
+          }
+        }
         openNote(path);
       } catch {
         $("#unlockErr").textContent = "Wrong password.";
@@ -475,15 +490,65 @@ function noteMenuHtml(locked: boolean): string {
   );
 }
 
+/** Modal masked-password prompt. Resolves to the password, or null if cancelled. */
+function promptPassword(opts: { title: string; hint?: string; confirm?: boolean }): Promise<string | null> {
+  return new Promise((resolve) => {
+    const ov = $("#pwOverlay");
+    const inp = $("#pwInput") as HTMLInputElement;
+    const conf = $("#pwConfirm") as HTMLInputElement;
+    const go = $("#pwGo");
+    const close = $("#pwClose");
+    $("#pwTitle").textContent = opts.title;
+    $("#pwHint").textContent = opts.hint ?? "";
+    inp.value = "";
+    conf.value = "";
+    conf.hidden = !opts.confirm;
+    $("#pwErr").textContent = "";
+    ov.hidden = false;
+    setTimeout(() => inp.focus(), 10);
+    const cleanup = () => {
+      ov.hidden = true;
+      go.removeEventListener("click", onGo);
+      close.removeEventListener("click", onCancel);
+      ov.removeEventListener("click", onBackdrop);
+      inp.removeEventListener("keydown", onKey);
+      conf.removeEventListener("keydown", onKey);
+    };
+    const onGo = () => {
+      const v = inp.value;
+      if (!v) return void ($("#pwErr").textContent = "Enter a password.");
+      if (opts.confirm && v !== conf.value) return void ($("#pwErr").textContent = "Passwords don't match.");
+      cleanup();
+      resolve(v);
+    };
+    const onCancel = () => {
+      cleanup();
+      resolve(null);
+    };
+    const onBackdrop = (e: Event) => {
+      if (e.target === ov) onCancel();
+    };
+    const onKey = (e: Event) => {
+      if ((e as KeyboardEvent).key === "Enter") onGo();
+      else if ((e as KeyboardEvent).key === "Escape") onCancel();
+    };
+    go.addEventListener("click", onGo);
+    close.addEventListener("click", onCancel);
+    ov.addEventListener("click", onBackdrop);
+    inp.addEventListener("keydown", onKey);
+    conf.addEventListener("keydown", onKey);
+  });
+}
+
 /** Lock the currently-open note with a new password (must be open/unlocked). */
 async function lockNote(path: string): Promise<void> {
   if (!editor) return;
-  const pw = prompt("Set a password for this note. If you lose it, the note is unrecoverable.");
+  const pw = await promptPassword({
+    title: "Password-protect this note",
+    hint: "If you lose this password, the note is unrecoverable — there is no reset.",
+    confirm: true,
+  });
   if (!pw) return;
-  if (prompt("Confirm the password:") !== pw) {
-    alert("Passwords didn't match.");
-    return;
-  }
   const salt = randomKey(); // 32-byte scrypt salt
   const key = deriveNoteKey(pw, salt);
   const plainBody = editor.state.doc.toString();

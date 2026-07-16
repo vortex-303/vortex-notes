@@ -11,11 +11,10 @@ const page = await browser.newPage();
 const errors = [];
 page.on("pageerror", (e) => errors.push(String(e)));
 
-// Answer prompts: note title, and both password prompts.
+// Note title uses a prompt(); passwords use a masked modal (below).
+let nextTitle = "Diary";
 page.on("dialog", async (d) => {
-  const m = d.message();
-  if (/title/i.test(m)) await d.accept("Diary");
-  else if (/password/i.test(m)) await d.accept("notepw123");
+  if (/title/i.test(d.message())) await d.accept(nextTitle);
   else await d.accept();
 });
 
@@ -41,15 +40,35 @@ try {
   await page.keyboard.type(SECRET);
   await page.waitForTimeout(1500);
 
-  // lock it: ⋯ → Password-protect
+  // lock it: ⋯ → Password-protect → masked modal (password + confirm)
   await page.click("#moreBtn");
   await page.click("#lockBtnItem");
+  await page.waitForSelector("#pwInput", { state: "visible" });
+  check("lock password input is masked (type=password)", (await page.getAttribute("#pwInput", "type")) === "password");
+  await page.fill("#pwInput", "notepw123");
+  await page.fill("#pwConfirm", "notepw123");
+  await page.click("#pwGo");
   await page.waitForTimeout(1500); // scrypt + save
-  check("note shows 🔒 in the list after locking", (await page.textContent("#list")).includes("🔒"));
+  check("note shows 🔒 + its real title in the list", (await page.textContent("#list")).includes("🔒 Diary"));
 
   // still unlocked in-session: content readable
   const inSession = await page.textContent("#cm .cm-content").catch(() => "");
   check("stays unlocked in the same session", inSession.includes(SECRET) || inSession.includes("secret"));
+
+  // second note, locked with the SAME password (for the session-wide unlock check)
+  nextTitle = "Diary Two";
+  await page.click("#newBtn");
+  await page.waitForSelector("#cm .cm-content");
+  await page.click("#cm .cm-content");
+  await page.keyboard.type("second secret note");
+  await page.waitForTimeout(1200);
+  await page.click("#moreBtn");
+  await page.click("#lockBtnItem");
+  await page.waitForSelector("#pwInput", { state: "visible" });
+  await page.fill("#pwInput", "notepw123");
+  await page.fill("#pwConfirm", "notepw123");
+  await page.click("#pwGo");
+  await page.waitForTimeout(1500);
 
   // reload → fresh session (session keys gone; account needs the phrase)
   await page.reload();
@@ -59,9 +78,11 @@ try {
   await page.waitForSelector("#main", { state: "visible", timeout: 15000 });
 
   // open the locked note → password screen, content NOT shown
-  await page.click("#list a");
+  await page.getByText("🔒 Diary", { exact: true }).click();
   await page.waitForSelector("#unlockPw", { timeout: 8000 });
   check("locked note shows the password screen after reload", await page.isVisible("#unlockPw"));
+  check("unlock password input is masked (type=password)", (await page.getAttribute("#unlockPw", "type")) === "password");
+  check("title stays visible on the locked note (not hidden)", (await page.textContent("#note")).includes("Diary"));
   const shellText = await page.textContent("#note");
   check("secret is NOT visible before unlocking", !shellText.includes(SECRET));
 
@@ -77,6 +98,13 @@ try {
   await page.waitForSelector("#cm .cm-content", { timeout: 8000 });
   const unlocked = await page.textContent("#cm .cm-content");
   check("correct password reveals the exact content (no data loss)", unlocked.includes(SECRET));
+
+  // session-wide: the OTHER same-password note now opens without re-prompting
+  await page.click("text=Diary Two");
+  await page.waitForTimeout(600);
+  const secondOpen = await page.isVisible("#unlockPw").catch(() => false);
+  const secondBody = await page.textContent("#cm .cm-content, #note").catch(() => "");
+  check("same-password note is unlocked for the session (no re-prompt)", !secondOpen && secondBody.includes("second secret note"));
 
   check("no uncaught page errors", errors.length === 0);
   if (errors.length) console.log("  errors:", errors.slice(0, 3));

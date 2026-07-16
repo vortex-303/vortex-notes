@@ -573,6 +573,16 @@ function appShell(_nonce: string): string {
     #acctModal { border-radius:16px 16px 0 0; max-width:none;
       padding-bottom:calc(1.25rem + env(safe-area-inset-bottom)); }
   }
+  #pwOverlay { position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:60;
+    display:flex; align-items:center; justify-content:center; padding:1rem; }
+  #pwOverlay[hidden] { display:none; }
+  #pwModal { background:var(--surface); border:1px solid var(--line); border-radius:14px;
+    max-width:24rem; width:100%; padding:1.1rem 1.25rem 1.25rem; box-shadow:0 18px 50px rgba(0,0,0,0.35); }
+  #pwModal .pairinput { text-transform:none; letter-spacing:normal; text-align:left; font-family:var(--sans); font-weight:400; }
+  @media (max-width:720px) {
+    #pwOverlay { align-items:flex-end; padding:0; }
+    #pwModal { border-radius:16px 16px 0 0; max-width:none; padding-bottom:calc(1.25rem + env(safe-area-inset-bottom)); }
+  }
   #pairOverlay { position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:50;
     display:flex; align-items:center; justify-content:center; padding:1rem; }
   #pairOverlay[hidden] { display:none; }
@@ -725,6 +735,16 @@ function appShell(_nonce: string): string {
       <button id="pairApprove" class="pairgo">Approve</button>
     </div>
     <div id="pairStatus" class="tipsfoot"></div>
+  </div>
+</div>
+<div id="pwOverlay" hidden>
+  <div id="pwModal" role="dialog" aria-label="Password">
+    <div class="tipshead"><strong id="pwTitle">Password</strong><button class="iconbtn" id="pwClose" aria-label="Close">✕</button></div>
+    <p id="pwHint" class="tipsintro"></p>
+    <input id="pwInput" type="password" class="pairinput" placeholder="Password" autocomplete="new-password">
+    <input id="pwConfirm" type="password" class="pairinput" placeholder="Confirm password" autocomplete="new-password" hidden>
+    <div id="pwErr" class="lockerr"></div>
+    <button id="pwGo" class="pairgo">OK</button>
   </div>
 </div>
 <div id="tipsOverlay" hidden>
