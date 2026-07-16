@@ -128,6 +128,11 @@ async function unlock(phrase: string, opts: { createSpaceIfEmpty?: boolean } = {
   spaceKey = openBox(fromHex(sealed), account.box);
   spaceId = chosen.id;
   await refresh();
+  try {
+    for (const p of await client.listPublic()) {
+      publicMap.set(p.path, { slug: p.slug, author: p.author, theme: p.theme });
+    }
+  } catch { /* offline is fine */ }
   $("#lock").style.display = "none";
   $("#main").style.display = "flex";
   pollTimer = window.setInterval(() => void refresh().catch(() => undefined), 30_000);
@@ -216,6 +221,8 @@ let lastSavedBody = "";
 let lockedCtx: { key: Uint8Array; salt: Uint8Array } | null = null;
 // Session cache of note passwords: unlocked notes stay unlocked until reload/lock.
 const sessionKeys = new Map<string, { key: Uint8Array; salt: Uint8Array }>();
+// path → publish record; loaded at unlock, kept fresh on publish/unpublish.
+const publicMap = new Map<string, { slug: string; author: string | null; theme: string }>();
 
 /** Full content to persist = stashed frontmatter + (re-encrypted) editor body. */
 function editorContent(): string {
@@ -239,6 +246,7 @@ async function flushSave(path: string): Promise<void> {
     await pushNote(path, content);
     lastSavedBody = bodyNow;
     lastSaved = content;
+    republishIfPublic(path);
     saveState = "idle";
     setSaveState("saved");
     window.setTimeout(() => saveState === "idle" && setSaveState(""), 1500);
@@ -355,7 +363,7 @@ function mountEditor(path: string, n: DocPayload, body: string, locked: boolean)
   lastSavedBody = body;
   $("#note").innerHTML =
     noteHead(n, `<button class="mbtn" id="readBtn">read</button><button class="mbtn" id="moreBtn">⋯</button><button class="mbtn danger" id="delBtn">delete</button>`) +
-    noteMenuHtml(locked) +
+    noteMenuHtml(locked, path) +
     `<div id="cm"></div>`;
   const scheduleSave = () => {
     saveState = "dirty";
@@ -465,7 +473,7 @@ function openReader(path: string): void {
   }
   $("#note").innerHTML =
     noteHead(n, `<button class="mbtn primary" id="liveBtn">edit</button><button class="mbtn" id="moreBtn">⋯</button><button class="mbtn danger" id="delBtn">delete</button>`) +
-    noteMenuHtml(env !== null) +
+    noteMenuHtml(env !== null, path) +
     `<article id="article" title="Tap to edit">${marked.parse(body, { async: false }) as string}</article>`;
   $("#liveBtn").addEventListener("click", () => openNote(path));
   $("#article").addEventListener("click", (e) => {
@@ -478,14 +486,17 @@ function openReader(path: string): void {
   $("#pane").scrollTop = 0;
 }
 
-function noteMenuHtml(locked: boolean): string {
+function noteMenuHtml(locked: boolean, path?: string): string {
+  const isPublic = path ? publicMap.has(path) : false;
   return (
     `<div class="notemenu" id="noteMenu" hidden>` +
     `<button class="menuitem" id="renameBtn">✎  Rename / move</button>` +
     `<button class="menuitem" id="dupBtn">⧉  Duplicate</button>` +
     (locked
-      ? `<button class="menuitem" id="unlockPermBtn">🔓  Remove password</button>`
-      : `<button class="menuitem" id="lockBtnItem">🔒  Password-protect</button>`) +
+      ? `<button class="menuitem" id="lockNowBtn">🔒  Lock now</button>` +
+        `<button class="menuitem" id="unlockPermBtn">🔓  Remove password</button>`
+      : `<button class="menuitem" id="lockBtnItem">🔒  Password-protect</button>` +
+        `<button class="menuitem" id="pubBtn">${isPublic ? "🌐  Public link…" : "🌐  Make public"}</button>`) +
     `</div>`
   );
 }
@@ -629,6 +640,13 @@ function wireCommonNoteButtons(path: string): void {
     $("#dupBtn").addEventListener("click", () => void duplicateNote(path).catch((e) => alert((e as Error).message)));
     document.getElementById("lockBtnItem")?.addEventListener("click", () => void lockNote(path).catch((e) => alert((e as Error).message)));
     document.getElementById("unlockPermBtn")?.addEventListener("click", () => void unlockPermanent(path).catch((e) => alert((e as Error).message)));
+    document.getElementById("lockNowBtn")?.addEventListener("click", () => {
+      void closeEditor().then(() => {
+        sessionKeys.delete(path);
+        openNote(path); // envelope + no session key → password screen
+      });
+    });
+    document.getElementById("pubBtn")?.addEventListener("click", () => openPublishModal(path));
   }
   $("#delBtn").addEventListener("click", () => {
     if (!confirm(`Delete ${path} everywhere?`)) return;
@@ -671,8 +689,110 @@ async function closeEditor(): Promise<void> {
   }
 }
 
+// ---------- public notes ----------
+function bodyForPublish(path: string): string | null {
+  const n = notes.get(path);
+  if (!n || isLockedContent(n.content)) return null;
+  return splitFrontmatter(n.content).body.replace(/^\n+/, "");
+}
+
+function openPublishModal(path: string): void {
+  const n = notes.get(path);
+  if (!n) return;
+  if (isLockedContent(n.content) && !sessionKeys.has(path)) return alert("Unlock the note first.");
+  const existing = publicMap.get(path);
+  const ov = $("#pubOverlay");
+  $("#pubTitle").textContent = existing ? "Public link" : "Make this note public";
+  ($("#pubName") as HTMLInputElement).value = localStorage.getItem("vn-authorname") ?? "";
+  if (existing) {
+    (document.querySelector(`input[name="pubTheme"][value="${existing.theme}"]`) as HTMLInputElement | null)?.click?.();
+    (document.querySelector(`input[name="pubAuthor"][value="${existing.author ? "name" : "anon"}"]`) as HTMLInputElement).checked = true;
+    $("#pubLinkRow").hidden = false;
+    const url = `${location.origin}/p/${existing.slug}`;
+    ($("#pubLink") as HTMLAnchorElement).href = url;
+    $("#pubLink").textContent = url;
+    ($("#pubGo") as HTMLButtonElement).textContent = "Update";
+    ($("#pubOff") as HTMLButtonElement).hidden = false;
+  } else {
+    $("#pubLinkRow").hidden = true;
+    ($("#pubGo") as HTMLButtonElement).textContent = "Publish";
+    ($("#pubOff") as HTMLButtonElement).hidden = true;
+  }
+  $("#pubErr").textContent = "";
+  ov.hidden = false;
+
+  const onGo = () => {
+    const anon = (document.querySelector('input[name="pubAuthor"]:checked') as HTMLInputElement).value === "anon";
+    const name = ($("#pubName") as HTMLInputElement).value.trim();
+    if (!anon && !name) return void ($("#pubErr").textContent = "Enter a display name or pick Anonymous.");
+    if (!anon) localStorage.setItem("vn-authorname", name);
+    const theme = (document.querySelector('input[name="pubTheme"]:checked') as HTMLInputElement).value;
+    const markdown = bodyForPublish(path);
+    if (markdown === null || !client) return void ($("#pubErr").textContent = "Cannot publish this note.");
+    $("#pubErr").textContent = "Publishing…";
+    void client
+      .publishNote({ slug: existing?.slug, path, title: noteTitle(n), author: anon ? null : name, theme, markdown })
+      .then((slug) => {
+        publicMap.set(path, { slug, author: anon ? null : name, theme });
+        cleanup();
+        openPublishModal(path); // reopen showing the link
+      })
+      .catch((e) => ($("#pubErr").textContent = (e as Error).message));
+  };
+  const onOff = () => {
+    if (!existing || !client) return;
+    $("#pubErr").textContent = "Removing…";
+    void client
+      .unpublishNote(existing.slug)
+      .then(() => {
+        publicMap.delete(path);
+        cleanup();
+        if (current === path) openNote(path);
+      })
+      .catch((e) => ($("#pubErr").textContent = (e as Error).message));
+  };
+  const onCopy = () => {
+    void navigator.clipboard.writeText(($("#pubLink") as HTMLAnchorElement).href).then(() => {
+      $("#pubCopy").textContent = "copied";
+      setTimeout(() => ($("#pubCopy").textContent = "copy"), 1500);
+    });
+  };
+  const onClose = () => cleanup();
+  const onBackdrop = (e: Event) => { if (e.target === ov) cleanup(); };
+  function cleanup(): void {
+    ov.hidden = true;
+    $("#pubGo").removeEventListener("click", onGo);
+    $("#pubOff").removeEventListener("click", onOff);
+    $("#pubCopy").removeEventListener("click", onCopy);
+    $("#pubClose").removeEventListener("click", onClose);
+    ov.removeEventListener("click", onBackdrop);
+  }
+  $("#pubGo").addEventListener("click", onGo);
+  $("#pubOff").addEventListener("click", onOff);
+  $("#pubCopy").addEventListener("click", onCopy);
+  $("#pubClose").addEventListener("click", onClose);
+  ov.addEventListener("click", onBackdrop);
+}
+
+/** Auto-republish: called after each successful save of a published note. */
+function republishIfPublic(path: string): void {
+  const pub = publicMap.get(path);
+  const n = notes.get(path);
+  if (!pub || !n || !client) return;
+  const markdown = bodyForPublish(path);
+  if (markdown === null) return; // became locked — leave the public copy as-is
+  void client
+    .publishNote({ slug: pub.slug, path, title: noteTitle(n), author: pub.author, theme: pub.theme, markdown })
+    .catch(() => undefined); // transient failures retry on next save
+}
+
 async function deleteNote(path: string): Promise<void> {
   if (!client || !spaceKey || !spaceId) throw new Error("Locked.");
+  const pub = publicMap.get(path);
+  if (pub) {
+    await client.unpublishNote(pub.slug).catch(() => undefined);
+    publicMap.delete(path);
+  }
   const payload: DocPayload = { v: 1, path, content: "", mtimeMs: Date.now(), deleted: true };
   const blob = encryptPayload(spaceKey, utf8(JSON.stringify(payload)), `vortex-doc-v1:${path}`);
   const seq = await client.pushUpdate(spaceId, path, blob);
@@ -892,6 +1012,14 @@ $("#acctDownload").addEventListener("click", () => {
 $("#acctClose").addEventListener("click", () => (acctOverlay.hidden = true));
 acctOverlay.addEventListener("click", (e) => {
   if (e.target === acctOverlay) acctOverlay.hidden = true;
+});
+
+$("#lockAllBtn").addEventListener("click", () => {
+  void closeEditor().then(() => {
+    sessionKeys.clear();
+    if (current) openNote(current);
+    renderList(($("#filter") as HTMLInputElement).value.trim().toLowerCase());
+  });
 });
 
 $("#tipsBtn").addEventListener("click", () => {

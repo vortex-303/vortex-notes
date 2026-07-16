@@ -175,6 +175,73 @@ test("web-first onboarding: account + space created browser-style, CLI machine j
   }
 });
 
+test("public notes: publish, themed page, stable slug on update, unpublish, scoping", async () => {
+  const relay = await startRelay({ port: 0 });
+  const base = `http://127.0.0.1:${relay.port}`;
+  try {
+    freshHome();
+    const { identity } = initIdentity("mac");
+    const c = new RelayClient(base, identity);
+    await c.register();
+
+    const slug = await c.publishNote({
+      path: "poetry/decada.md",
+      title: "La Próxima Década",
+      author: "Nico",
+      theme: "manuscript",
+      markdown: "# La Próxima Década\n\nLa pantalla aún brilla.\n\n<script>alert(1)</script>",
+    });
+    assert.match(slug, /^la-proxima-decada-[a-z0-9]{4}$/);
+
+    const page = await fetch(`${base}/p/${slug}`);
+    assert.equal(page.status, 200);
+    const html = await page.text();
+    assert.match(html, /La pantalla aún brilla/);
+    assert.match(html, /Nico/);
+    assert.match(html, /Written in/);
+    assert.ok(!html.includes("<script>alert"), "script tags stripped");
+    assert.match(page.headers.get("content-security-policy") ?? "", /default-src 'none'/);
+
+    // update re-uses the same slug (stable public links)
+    const slug2 = await c.publishNote({
+      slug,
+      path: "poetry/decada.md",
+      title: "La Próxima Década",
+      author: null,
+      theme: "vortex",
+      markdown: "updated body",
+    });
+    assert.equal(slug2, slug);
+    const html2 = await (await fetch(`${base}/p/${slug}`)).text();
+    assert.match(html2, /updated body/);
+    assert.match(html2, /Anonymous/);
+    assert.match(html2, /watermark/); // vortex theme applied
+
+    // listing + unpublish
+    assert.equal((await c.listPublic()).length, 1);
+    await c.unpublishNote(slug);
+    assert.equal((await fetch(`${base}/p/${slug}`)).status, 404);
+
+    // another account can't touch someone else's slug
+    freshHome();
+    const { identity: other } = initIdentity("other");
+    const c2 = new RelayClient(base, other);
+    await c2.register();
+    const slug3 = await c2.publishNote({ path: "x.md", title: "Mine", author: null, theme: "typewriter", markdown: "hi" });
+    freshHome();
+    const { identity: third } = initIdentity("third");
+    const c3 = new RelayClient(base, third);
+    await c3.register();
+    await assert.rejects(c3.unpublishNote(slug3), /Not your public note/);
+    await assert.rejects(
+      c3.publishNote({ slug: slug3, path: "y.md", title: "Steal", author: null, theme: "vortex", markdown: "x" }),
+      /Not your public note/
+    );
+  } finally {
+    await relay.close();
+  }
+});
+
 test("quota: pushes are rejected past the cap; usage endpoint reports", async () => {
   const relay = await startRelay({ port: 0, quotaBytes: 2000 });
   const base = `http://127.0.0.1:${relay.port}`;

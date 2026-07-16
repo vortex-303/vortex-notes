@@ -23,6 +23,8 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import { verify, fromHex, toHex, utf8 } from "../crypto.js";
 import { verifyDeviceCert, verifyAgentChain, type DeviceCertPayload, type SignedCert } from "../account.js";
 import { landingShell } from "./landing.js";
+import { renderPublicPage, type PublicTheme } from "./publicpage.js";
+import { marked } from "marked";
 
 const MAX_BODY = 8 * 1024 * 1024;
 const MAX_SKEW_MS = 5 * 60 * 1000;
@@ -67,6 +69,18 @@ export async function startRelay(
       account TEXT PRIMARY KEY,
       bytesUsed INTEGER NOT NULL DEFAULT 0
     );
+    CREATE TABLE IF NOT EXISTS public_notes (
+      slug TEXT PRIMARY KEY,
+      account TEXT NOT NULL,
+      path TEXT NOT NULL,
+      title TEXT NOT NULL,
+      author TEXT,
+      theme TEXT NOT NULL DEFAULT 'manuscript',
+      md TEXT NOT NULL,
+      createdAt TEXT NOT NULL,
+      updatedAt TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS public_account_path ON public_notes(account, path);
     CREATE TABLE IF NOT EXISTS pair_requests (
       code TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -169,6 +183,35 @@ export async function startRelay(
       return void res.end(fs.readFileSync(bundle));
     }
 
+    const pubMatch = url.pathname.match(/^\/p\/([a-z0-9-]+)$/);
+    if (req.method === "GET" && pubMatch) {
+      const row = db.prepare("SELECT * FROM public_notes WHERE slug=?").get(pubMatch[1]) as
+        | { title: string; author: string | null; theme: string; md: string; updatedAt: string }
+        | undefined;
+      if (!row) {
+        res.writeHead(404, { "Content-Type": "text/html; charset=utf-8" });
+        return void res.end("<h1 style='font-family:serif;text-align:center;margin-top:20vh'>This note is no longer public.</h1>");
+      }
+      // Render markdown; strip script tags belt-and-braces — the CSP below is
+      // the real guarantee that published content can't execute anything.
+      let bodyHtml = marked.parse(row.md, { async: false }) as string;
+      bodyHtml = bodyHtml.replace(/<script[\s\S]*?<\/script>/gi, "");
+      res.writeHead(200, {
+        "Content-Type": "text/html; charset=utf-8",
+        "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; img-src https: data:; font-src 'self'",
+        "Cache-Control": "public, max-age=60",
+      });
+      return void res.end(
+        renderPublicPage({
+          title: row.title,
+          author: row.author,
+          theme: row.theme as PublicTheme,
+          bodyHtml,
+          updatedAt: row.updatedAt,
+        })
+      );
+    }
+
     if (route === "POST /v1/pair/request") {
       const b = parse(body);
       const name = String(b.name ?? "agent").slice(0, 60);
@@ -247,6 +290,59 @@ export async function startRelay(
       return sendJson(res, 200, { ok: true });
     }
 
+    if (route === "PUT /v1/public") {
+      if (isAgent) return sendJson(res, 403, { error: "Agents cannot publish notes" });
+      const b = parse(body);
+      const notePath = String(b.path ?? "");
+      const title = String(b.title ?? "Untitled").slice(0, 200);
+      const author = b.author ? String(b.author).slice(0, 80) : null;
+      const theme = ["manuscript", "vortex", "typewriter"].includes(String(b.theme)) ? String(b.theme) : "manuscript";
+      const md = String(b.markdown ?? "");
+      if (!notePath || !md) return sendJson(res, 400, { error: "path and markdown required" });
+      if (md.length > 500_000) return sendJson(res, 413, { error: "Note too large to publish" });
+      const now = new Date().toISOString();
+      const givenSlug = b.slug ? String(b.slug) : null;
+      let row = givenSlug
+        ? (db.prepare("SELECT slug, account, md FROM public_notes WHERE slug=?").get(givenSlug) as { slug: string; account: string; md: string } | undefined)
+        : (db.prepare("SELECT slug, account, md FROM public_notes WHERE account=? AND path=?").get(account, notePath) as { slug: string; account: string; md: string } | undefined);
+      if (row && row.account !== account) return sendJson(res, 403, { error: "Not your public note" });
+      if (row) {
+        if (quota && usageOf(account) + (md.length - row.md.length) > quota) {
+          return sendJson(res, 413, { error: "Storage quota exceeded" });
+        }
+        db.prepare("UPDATE public_notes SET path=?, title=?, author=?, theme=?, md=?, updatedAt=? WHERE slug=?")
+          .run(notePath, title, author, theme, md, now, row.slug);
+        addUsage.run(account, md.length - row.md.length);
+        return sendJson(res, 200, { slug: row.slug });
+      }
+      if (quota && usageOf(account) + md.length > quota) {
+        return sendJson(res, 413, { error: "Storage quota exceeded" });
+      }
+      const base = title.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "note";
+      const alphabet = "abcdefghjkmnpqrstvwxyz23456789";
+      let suffix = "";
+      for (const byte of crypto.randomBytes(4)) suffix += alphabet[byte % alphabet.length];
+      const slug = base + "-" + suffix;
+      db.prepare("INSERT INTO public_notes (slug, account, path, title, author, theme, md, createdAt, updatedAt) VALUES (?,?,?,?,?,?,?,?,?)")
+        .run(slug, account, notePath, title, author, theme, md, now, now);
+      addUsage.run(account, md.length);
+      return sendJson(res, 200, { slug });
+    }
+    const delPubMatch = url.pathname.match(/^\/v1\/public\/([a-z0-9-]+)$/);
+    if (req.method === "DELETE" && delPubMatch) {
+      if (isAgent) return sendJson(res, 403, { error: "Agents cannot unpublish notes" });
+      const row = db.prepare("SELECT account, md FROM public_notes WHERE slug=?").get(delPubMatch[1]) as { account: string; md: string } | undefined;
+      if (!row) return sendJson(res, 404, { error: "No such public note" });
+      if (row.account !== account) return sendJson(res, 403, { error: "Not your public note" });
+      db.prepare("DELETE FROM public_notes WHERE slug=?").run(delPubMatch[1]);
+      addUsage.run(account, -row.md.length);
+      return sendJson(res, 200, { ok: true });
+    }
+    if (route === "GET /v1/public") {
+      const rows = db.prepare("SELECT slug, path, title, author, theme, updatedAt FROM public_notes WHERE account=?").all(account);
+      return sendJson(res, 200, { published: rows });
+    }
     if (route === "GET /v1/usage") {
       return sendJson(res, 200, { bytesUsed: usageOf(account), quotaBytes: quota });
     }
@@ -573,6 +669,30 @@ function appShell(_nonce: string): string {
     #acctModal { border-radius:16px 16px 0 0; max-width:none;
       padding-bottom:calc(1.25rem + env(safe-area-inset-bottom)); }
   }
+  #pubOverlay { position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:55;
+    display:flex; align-items:center; justify-content:center; padding:1rem; }
+  #pubOverlay[hidden] { display:none; }
+  #pubModal { background:var(--surface); border:1px solid var(--line); border-radius:14px;
+    max-width:27rem; width:100%; max-height:88dvh; overflow-y:auto;
+    padding:1.1rem 1.25rem 1.25rem; box-shadow:0 18px 50px rgba(0,0,0,0.35); }
+  .pubname { border:none; border-bottom:1px solid var(--line); background:none; color:var(--ink);
+    font:0.9rem var(--sans); outline:none; padding:0.2rem 0.1rem; width:14rem; }
+  .pubname:focus { border-bottom-color:var(--accent); }
+  .themerow { display:flex; gap:0.6rem; margin-top:0.3rem; }
+  .themecard { flex:1; border:1px solid var(--line); border-radius:10px; padding:1.5rem 0.4rem 0.5rem;
+    text-align:center; cursor:pointer; font:600 0.68rem var(--mono); position:relative; overflow:hidden; }
+  .themecard input { position:absolute; opacity:0; }
+  .themecard span { position:relative; z-index:1; }
+  .themecard:has(input:checked) { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent); }
+  .t-manuscript { background:linear-gradient(174deg,#f4ead2,#e7d7b2); color:#5a4a28; }
+  .t-vortex { background:radial-gradient(circle at 50% 0%,#12211c,#090f0d); color:#4CC2A0; }
+  .t-typewriter { background:linear-gradient(180deg,#fbfaf5,#f0ede2); color:#b3382c; }
+  .publink { display:flex; align-items:center; gap:0.6rem; }
+  .publink a { color:var(--accent); font:0.8rem var(--mono); word-break:break-all; }
+  @media (max-width:720px) {
+    #pubOverlay { align-items:flex-end; padding:0; }
+    #pubModal { border-radius:16px 16px 0 0; max-width:none; padding-bottom:calc(1.25rem + env(safe-area-inset-bottom)); }
+  }
   #pwOverlay { position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:60;
     display:flex; align-items:center; justify-content:center; padding:1rem; }
   #pwOverlay[hidden] { display:none; }
@@ -683,6 +803,7 @@ function appShell(_nonce: string): string {
           <button class="menuitem" id="acctBtn">🔑&ensp;Account &amp; recovery</button>
           <button class="menuitem" id="pairBtn">🤝&ensp;Pair an agent</button>
           <button class="menuitem" id="tipsBtn">✎&ensp;Markdown tips</button>
+          <button class="menuitem" id="lockAllBtn">🔒&ensp;Lock all notes</button>
           <button class="menuitem" id="refreshBtn">⟳&ensp;Pull latest</button>
           <button class="menuitem" id="themeBtn">◐&ensp;Light / dark</button>
           <button class="menuitem" id="lockBtn">🔒&ensp;Lock</button>
@@ -735,6 +856,32 @@ function appShell(_nonce: string): string {
       <button id="pairApprove" class="pairgo">Approve</button>
     </div>
     <div id="pairStatus" class="tipsfoot"></div>
+  </div>
+</div>
+<div id="pubOverlay" hidden>
+  <div id="pubModal" role="dialog" aria-label="Public link">
+    <div class="tipshead"><strong id="pubTitle">Make this note public</strong><button class="iconbtn" id="pubClose" aria-label="Close">✕</button></div>
+    <p class="tipsintro">Anyone with the link can read it. A readable copy is stored on the server —
+    that's what "public" means. Edits you make re-publish automatically; unpublish removes it.</p>
+    <div class="acctlabel">Signed as</div>
+    <label class="confirmrow"><input type="radio" name="pubAuthor" value="name" checked>
+      <input id="pubName" class="pubname" placeholder="Your display name" autocomplete="off"></label>
+    <label class="confirmrow"><input type="radio" name="pubAuthor" value="anon"> Anonymous</label>
+    <div class="acctlabel" style="margin-top:0.8rem">Theme</div>
+    <div class="themerow">
+      <label class="themecard t-manuscript"><input type="radio" name="pubTheme" value="manuscript" checked><span>Manuscript</span></label>
+      <label class="themecard t-vortex"><input type="radio" name="pubTheme" value="vortex"><span>Vortex</span></label>
+      <label class="themecard t-typewriter"><input type="radio" name="pubTheme" value="typewriter"><span>Typewriter</span></label>
+    </div>
+    <div id="pubLinkRow" hidden>
+      <div class="acctlabel" style="margin-top:0.8rem">Public link</div>
+      <div class="publink"><a id="pubLink" target="_blank" rel="noopener"></a><button class="linkbtn" id="pubCopy">copy</button></div>
+    </div>
+    <div id="pubErr" class="lockerr"></div>
+    <div class="acctrow" style="margin-top:0.9rem">
+      <button id="pubGo" class="pairgo">Publish</button>
+      <button id="pubOff" class="mbtn danger" hidden>Unpublish</button>
+    </div>
   </div>
 </div>
 <div id="pwOverlay" hidden>

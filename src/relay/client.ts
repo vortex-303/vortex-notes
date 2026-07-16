@@ -74,6 +74,20 @@ export class RelayClient {
     await ok(await this.signed("POST", "/v1/pair/approve", { code, grant: grantB64 }));
   }
 
+  async publishNote(opts: { slug?: string; path: string; title: string; author: string | null; theme: string; markdown: string }): Promise<string> {
+    const res = await ok(await this.signed("PUT", "/v1/public", opts));
+    return ((await res.json()) as { slug: string }).slug;
+  }
+
+  async unpublishNote(slug: string): Promise<void> {
+    await ok(await this.signed("DELETE", `/v1/public/${slug}`));
+  }
+
+  async listPublic(): Promise<{ slug: string; path: string; title: string; author: string | null; theme: string; updatedAt: string }[]> {
+    const res = await ok(await this.signed("GET", "/v1/public"));
+    return ((await res.json()) as { published: { slug: string; path: string; title: string; author: string | null; theme: string; updatedAt: string }[] }).published;
+  }
+
   async getUsage(): Promise<{ bytesUsed: number; quotaBytes: number | null }> {
     const res = await ok(await this.signed("GET", "/v1/usage"));
     return (await res.json()) as { bytesUsed: number; quotaBytes: number | null };
