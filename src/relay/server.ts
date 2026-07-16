@@ -495,13 +495,21 @@ function appShell(_nonce: string): string {
   .dailybox input:focus { border-color:var(--accent); }
 
   main.pane { flex:1; overflow-y:auto; }
-  #note { max-width:46rem; margin:0 auto; padding:3rem 2.2rem 6rem; }
+  #note { position:relative; max-width:46rem; margin:0 auto; padding:3rem 2.2rem 6rem; }
   .placeholder { color:var(--ink-faint); font:1rem var(--serif); font-style:italic; margin-top:30vh; text-align:center; }
   .notehead { border-bottom:1px solid var(--line); padding-bottom:1rem; margin-bottom:1.6rem; }
   .notehead .meta { font:0.7rem var(--mono); color:var(--ink-faint); letter-spacing:0.05em;
     display:flex; gap:0.6rem; align-items:center; flex-wrap:wrap; }
   .notehead .meta .path { margin-right:auto; }
   .notehead h1 { font:700 2rem/1.15 var(--serif); letter-spacing:-0.015em; margin:0.4rem 0 0; }
+  .notemeta { font:0.72rem/1.5 var(--mono); color:var(--ink-faint); margin-top:0.45rem; letter-spacing:0.02em; }
+  .notemenu { position:absolute; z-index:20; margin-top:0.3rem; min-width:12rem;
+    background:var(--surface); border:1px solid var(--line); border-radius:10px;
+    box-shadow:0 8px 28px rgba(0,0,0,0.18); padding:0.35rem; }
+  .notemenu[hidden] { display:none; }
+  .notemenu .menuitem { display:block; width:100%; text-align:left; background:none; border:none;
+    color:var(--ink); font:0.85rem var(--sans); padding:0.6rem 0.75rem; border-radius:7px; cursor:pointer; }
+  .notemenu .menuitem:hover { background:var(--accent-soft); color:var(--accent); }
   .mbtn { background:none; border:1px solid var(--line); border-radius:6px; color:var(--ink-soft);
     font:0.68rem var(--mono); padding:0.2rem 0.55rem; cursor:pointer; }
   .mbtn:hover { border-color:var(--accent); color:var(--accent); }

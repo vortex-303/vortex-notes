@@ -226,13 +226,67 @@ async function flushSave(path: string): Promise<void> {
   }
 }
 
+/** Byte offset where the body starts, i.e. just past the frontmatter block. */
+function frontmatterEnd(content: string): number {
+  const m = content.match(/^---\n[\s\S]*?\n---\n?/);
+  return m ? m[0].length : 0;
+}
+
+function noteMeta(content: string): { created?: string; updated?: string; tags: string[] } {
+  const { frontmatter } = splitFrontmatter(content);
+  const tags: string[] = [];
+  if (!frontmatter) return { tags };
+  const created = frontmatter.match(/^created:\s*['"]?(.+?)['"]?\s*$/m)?.[1];
+  const updated = frontmatter.match(/^updated:\s*['"]?(.+?)['"]?\s*$/m)?.[1];
+  const inline = frontmatter.match(/^tags:\s*\[(.+)\]\s*$/m);
+  if (inline) {
+    tags.push(...inline[1].split(",").map((t) => t.trim().replace(/['"]/g, "")).filter(Boolean));
+  } else {
+    let inTags = false;
+    for (const l of frontmatter.split("\n")) {
+      if (/^tags:\s*$/.test(l)) { inTags = true; continue; }
+      if (!inTags) continue;
+      const mt = l.match(/^\s+-\s*['"]?(.+?)['"]?\s*$/);
+      if (mt) tags.push(mt[1]);
+      else if (l.trim() && !/^\s/.test(l)) break;
+    }
+  }
+  return { created, updated, tags };
+}
+
+function fmtDate(iso?: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? "" : d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+}
+
+/** Small dim detail line: edited-date + tags. Replaces dumping raw frontmatter. */
+function metaDetailHtml(content: string): string {
+  const m = noteMeta(content);
+  const bits: string[] = [];
+  const d = fmtDate(m.updated) || fmtDate(m.created);
+  if (d) bits.push((m.updated ? "edited " : "") + d);
+  if (m.tags.length) bits.push(m.tags.slice(0, 8).map((t) => "#" + t).join(" "));
+  return bits.length ? `<div class="notemeta">${esc(bits.join("   ·   "))}</div>` : "";
+}
+
+/** Set/replace the frontmatter title (keeps the sidebar name in sync on rename). */
+function setFrontmatterTitle(content: string, title: string): string {
+  const { frontmatter, body } = splitFrontmatter(content);
+  if (!frontmatter) return content;
+  const fm = /^title:/m.test(frontmatter)
+    ? frontmatter.replace(/^title:.*$/m, `title: ${title}`)
+    : `title: ${title}\n${frontmatter}`;
+  return `---\n${fm}\n---\n\n${body.replace(/^\n+/, "")}`;
+}
+
 function noteHead(n: DocPayload, buttons: string): string {
   return (
     `<div class="notehead"><div class="meta">` +
     `<button class="mbtn backbtn" id="backBtn">‹ notes</button>` +
     `<span class="path">${esc(n.path)}</span><span id="savestate"></span>` +
     buttons +
-    `</div><h1>${esc(noteTitle(n))}</h1></div>`
+    `</div><h1>${esc(noteTitle(n))}</h1>${metaDetailHtml(n.content)}</div>`
   );
 }
 
@@ -244,7 +298,8 @@ function openNote(path: string): void {
   current = path;
   lastSaved = n.content;
   $("#note").innerHTML =
-    noteHead(n, `<button class="mbtn" id="readBtn">read</button><button class="mbtn danger" id="delBtn">delete</button>`) +
+    noteHead(n, `<button class="mbtn" id="readBtn">read</button><button class="mbtn" id="moreBtn">⋯</button><button class="mbtn danger" id="delBtn">delete</button>`) +
+    noteMenuHtml() +
     `<div id="cm"></div>`;
   const scheduleSave = () => {
     saveState = "dirty";
@@ -254,6 +309,9 @@ function openNote(path: string): void {
   };
   editor = new EditorView({
     doc: n.content,
+    // Start the cursor past the frontmatter so it renders collapsed
+    // ("⋯ properties") instead of dumping raw YAML in big type.
+    selection: { anchor: Math.min(frontmatterEnd(n.content), n.content.length) },
     parent: $("#cm"),
     extensions: [
       minimalSetup,
@@ -282,7 +340,8 @@ function openReader(path: string): void {
   current = path;
   const { body } = splitFrontmatter(n.content);
   $("#note").innerHTML =
-    noteHead(n, `<button class="mbtn primary" id="liveBtn">edit</button><button class="mbtn danger" id="delBtn">delete</button>`) +
+    noteHead(n, `<button class="mbtn primary" id="liveBtn">edit</button><button class="mbtn" id="moreBtn">⋯</button><button class="mbtn danger" id="delBtn">delete</button>`) +
+    noteMenuHtml() +
     `<article id="article" title="Tap to edit">${marked.parse(body, { async: false }) as string}</article>`;
   $("#liveBtn").addEventListener("click", () => openNote(path));
   $("#article").addEventListener("click", (e) => {
@@ -295,11 +354,73 @@ function openReader(path: string): void {
   $("#pane").scrollTop = 0;
 }
 
+function noteMenuHtml(): string {
+  return (
+    `<div class="notemenu" id="noteMenu" hidden>` +
+    `<button class="menuitem" id="renameBtn">✎  Rename / move</button>` +
+    `<button class="menuitem" id="dupBtn">⧉  Duplicate</button>` +
+    `</div>`
+  );
+}
+
+async function renameNote(oldPath: string): Promise<void> {
+  const n = notes.get(oldPath);
+  if (!n) return;
+  const input = prompt("New name (prefix with folder/ to move it):", oldPath.replace(/\.md$/, ""));
+  if (!input) return;
+  let folder = "";
+  let title = input.trim().replace(/\.md$/, "");
+  const slash = title.lastIndexOf("/");
+  if (slash > 0) {
+    folder = title.slice(0, slash);
+    title = title.slice(slash + 1);
+  }
+  const newPath = (folder ? folder.replace(/\/+$/, "") + "/" : "") + slugify(title) + ".md";
+  if (newPath === oldPath) return;
+  if (notes.has(newPath)) {
+    alert(`${newPath} already exists.`);
+    return;
+  }
+  await closeEditor();
+  await pushNote(newPath, setFrontmatterTitle(n.content, title));
+  await deleteNote(oldPath);
+  renderList();
+  openNote(newPath);
+}
+
+async function duplicateNote(path: string): Promise<void> {
+  const n = notes.get(path);
+  if (!n) return;
+  const base = path.replace(/\.md$/, "");
+  let newPath = base + "-copy.md";
+  let i = 2;
+  while (notes.has(newPath)) newPath = `${base}-copy-${i++}.md`;
+  await closeEditor();
+  await pushNote(newPath, n.content);
+  renderList();
+  openNote(newPath);
+}
+
 function wireCommonNoteButtons(path: string): void {
   $("#backBtn").addEventListener("click", () => {
     void closeEditor();
     setMobileNoteOpen(false);
   });
+  const moreBtn = document.getElementById("moreBtn");
+  const noteMenu = document.getElementById("noteMenu");
+  if (moreBtn && noteMenu) {
+    moreBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      (noteMenu as HTMLElement & { hidden: boolean }).hidden = !(noteMenu as HTMLElement & { hidden: boolean }).hidden;
+    });
+    document.addEventListener("click", (e) => {
+      if (!(noteMenu as HTMLElement).hidden && !(e.target as HTMLElement).closest("#noteMenu, #moreBtn")) {
+        (noteMenu as HTMLElement & { hidden: boolean }).hidden = true;
+      }
+    });
+    $("#renameBtn").addEventListener("click", () => void renameNote(path).catch((e) => alert((e as Error).message)));
+    $("#dupBtn").addEventListener("click", () => void duplicateNote(path).catch((e) => alert((e as Error).message)));
+  }
   $("#delBtn").addEventListener("click", () => {
     if (!confirm(`Delete ${path} everywhere?`)) return;
     void closeEditor();
