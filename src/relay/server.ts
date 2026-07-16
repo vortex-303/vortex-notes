@@ -134,6 +134,13 @@ export async function startRelay(
       });
       return void res.end(appShell(nonce));
     }
+    if (route === "GET /demo.svg") {
+      const here = path.dirname(fileURLToPath(import.meta.url));
+      const f = [path.join(here, "../assets/demo.svg"), path.join(here, "../../assets/demo.svg"), path.join(process.cwd(), "assets/demo.svg")].find((p) => fs.existsSync(p));
+      if (!f) return sendJson(res, 404, { error: "demo not built" });
+      res.writeHead(200, { "Content-Type": "image/svg+xml; charset=utf-8", "Cache-Control": "public, max-age=3600" });
+      return void res.end(fs.readFileSync(f));
+    }
     if (route === "GET /app/manifest.webmanifest") {
       res.writeHead(200, { "Content-Type": "application/manifest+json" });
       return void res.end(JSON.stringify({

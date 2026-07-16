@@ -1,7 +1,18 @@
 # Vortex Notes
 
-**Markdown notes with a first-party MCP server and zero-config local semantic search.**
-The vault your agents can actually use.
+**Your notes. Your agents' memory. One encrypted place.**
+
+<p align="center"><img src="assets/demo.svg" alt="Vortex Notes: install, cross-lingual search, pair an agent" width="740"></p>
+
+<p align="center">
+  <a href="https://vortex-relay.fly.dev/app"><b>Open the app</b></a> ·
+  <a href="https://www.npmjs.com/package/vortex-notes">npm</a> ·
+  <a href="https://vortex-relay.fly.dev">vortex-relay.fly.dev</a>
+</p>
+
+Plain-markdown notes with a first-party MCP server and zero-config local semantic
+search, end-to-end encrypted sync, and scoped agent access — the vault your agents
+can actually use.
 
 Your notes are plain `.md` files in a folder — open them in any editor, grep them,
 git them, point Obsidian at them. What Vortex Notes adds:

@@ -71,6 +71,8 @@ export function landingShell(nonce: string): string {
   @media (prefers-color-scheme: dark) { .cta { color:#10211C; } }
   .cta.ghost { background:none; color:var(--accent); border:1px solid var(--accent); }
 
+  .demo { display:block; width:100%; max-width:40rem; margin:1.8rem 0 0; border-radius:12px;
+    border:1px solid var(--line); }
   .promise { margin:2rem 0 0; padding:0.95rem 1.15rem; background:var(--accent-soft);
     border-left:3px solid var(--accent); font-size:0.92rem; border-radius:0 8px 8px 0; color:var(--ink-soft); }
   .promise strong { color:var(--ink); }
@@ -165,6 +167,7 @@ export function landingShell(nonce: string): string {
   Agents get their own keys: scoped, attributed, revocable.</p>
   <a class="cta" href="/app">Open the app</a>
   <a class="cta ghost" href="https://www.npmjs.com/package/vortex-notes">Install the CLI</a>
+  <img class="demo" src="/demo.svg" alt="install, cross-lingual search, pair an agent" width="740">
   <div class="promise"><strong>This server stores ciphertext only.</strong> Your 12-word recovery
   phrase is your whole identity — keys are derived in your browser or on your devices, never here.
   There is no password reset, because there is nothing here to reset.</div>

@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 424" width="900" height="424" role="img" aria-label="Vortex Notes terminal demo">
+<style>
+  text{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:18px}
+  .p{fill:#4CC2A0;font-weight:700} .cmd{fill:#E6ECE8} .str{fill:#D8B26A}
+  .ok{fill:#4CC2A0;font-weight:700} .dim{fill:#8FA69C} .res{fill:#C9E5DB}
+  .cmt{fill:#5F7268;font-style:italic} .acc{fill:#4CC2A0}
+  .code{fill:#4CC2A0;font-weight:700;letter-spacing:1px}
+  .title{fill:#5F7268;font-size:14px;font-family:-apple-system,sans-serif}
+  @keyframes r0{0%,3.08%{opacity:0}4.68%,90%{opacity:1}94%,100%{opacity:0}}
+.r0{opacity:0;animation:r0 13.0s infinite}
+@keyframes r1{0%,14.62%{opacity:0}16.22%,90%{opacity:1}94%,100%{opacity:0}}
+.r1{opacity:0;animation:r1 13.0s infinite}
+@keyframes r2{0%,20.77%{opacity:0}22.37%,90%{opacity:1}94%,100%{opacity:0}}
+.r2{opacity:0;animation:r2 13.0s infinite}
+@keyframes r3{0%,31.54%{opacity:0}33.14%,90%{opacity:1}94%,100%{opacity:0}}
+.r3{opacity:0;animation:r3 13.0s infinite}
+@keyframes r4{0%,38.46%{opacity:0}40.06%,90%{opacity:1}94%,100%{opacity:0}}
+.r4{opacity:0;animation:r4 13.0s infinite}
+@keyframes r5{0%,50.0%{opacity:0}51.6%,90%{opacity:1}94%,100%{opacity:0}}
+.r5{opacity:0;animation:r5 13.0s infinite}
+@keyframes r6{0%,56.92%{opacity:0}58.52%,90%{opacity:1}94%,100%{opacity:0}}
+.r6{opacity:0;animation:r6 13.0s infinite}
+@keyframes r7{0%,66.92%{opacity:0}68.52%,90%{opacity:1}94%,100%{opacity:0}}
+.r7{opacity:0;animation:r7 13.0s infinite}
+  @keyframes blink{0%,49%{opacity:1}50%,100%{opacity:0}}.cur{animation:blink 1s steps(1) infinite;fill:#4CC2A0}
+</style>
+<rect width="900" height="424" rx="14" fill="#0E1513"/>
+<circle cx="28" cy="28" r="7" fill="#E06B5C"/><circle cx="52" cy="28" r="7" fill="#E0B65C"/><circle cx="76" cy="28" r="7" fill="#5CC98A"/>
+<text class="title" x="450" y="33" text-anchor="middle">vortex-notes — your notes, your agents' memory</text>
+<line x1="0" y1="52" x2="900" y2="52" stroke="#1E2A26" stroke-width="1"/>
+<text class="r0" x="34" y="96"><tspan class="p">$ </tspan><tspan class="cmd">npm install -g vortex-notes</tspan></text>
+<text class="r1" x="34" y="136"><tspan class="p">$ </tspan><tspan class="cmd">vortex-notes setup</tspan></text>
+<text class="r2" x="34" y="176"><tspan class="ok">  ✓ </tspan><tspan class="dim">your notes are now a folder of markdown — synced &amp; encrypted</tspan></text>
+<text class="r3" x="34" y="216"><tspan class="p">$ </tspan><tspan class="cmd">vortex-notes search </tspan><tspan class="str">"breaded meat with cheese"</tspan></text>
+<text class="r4" x="34" y="256"><tspan class="res">  recetas.md › Milanesas napolitana</tspan><tspan class="cmt">   # Spanish note, English query</tspan></text>
+<text class="r5" x="34" y="296"><tspan class="p">$ </tspan><tspan class="cmd">npx vortex-notes pair</tspan></text>
+<text class="r6" x="34" y="336"><tspan class="dim">  Pairing code:  </tspan><tspan class="code">K M 3 P X R</tspan><tspan class="cmt">   # approve on your phone</tspan></text>
+<text class="r7" x="34" y="376"><tspan class="ok">  ✓ </tspan><tspan class="dim">agent wired — </tspan><tspan class="acc">scoped, signed, revocable</tspan></text>
+<rect class="cur" x="34" y="400" width="11" height="22"/>
+</svg>
