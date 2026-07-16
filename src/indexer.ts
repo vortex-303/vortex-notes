@@ -4,6 +4,7 @@ import Database from "better-sqlite3";
 import * as sqliteVec from "sqlite-vec";
 import { Vault, titleFromPath } from "./vault.js";
 import { EMBED_DIM, embedPassages, isSemanticDisabled } from "./embeddings.js";
+import { isLockedContent } from "./notelock.js";
 
 const SCHEMA_VERSION = "2";
 
@@ -128,7 +129,8 @@ export class Indexer {
     }
     const stat = fs.statSync(abs);
     const note = this.vault.readNote(rel);
-    const chunks = chunkMarkdown(note.body);
+    // Password-locked notes: index the title only, never the ciphertext body.
+    const chunks = isLockedContent(`---\n---\n${note.body}`) ? [] : chunkMarkdown(note.body);
 
     const tx = this.db.transaction(() => {
       this.deleteChunks(rel);

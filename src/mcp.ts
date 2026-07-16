@@ -7,6 +7,7 @@ import { Vault, slugify } from "./vault.js";
 import { Indexer, startVaultWatcher } from "./indexer.js";
 import { search } from "./search.js";
 import { buildContext } from "./context.js";
+import { isLockedContent } from "./notelock.js";
 
 export interface McpOptions {
   readOnly: boolean;
@@ -71,6 +72,9 @@ export async function startMcpServer(vault: Vault, opts: McpOptions): Promise<vo
     async ({ path: rel }) => {
       const note = vault.readNote(rel);
       const tags = note.tags.length ? ` | tags: ${note.tags.join(", ")}` : "";
+      if (isLockedContent(note.body) || isLockedContent(`---\n---\n${note.body}`)) {
+        return text(`# ${note.title}\npath: ${note.path}${tags}\n\n[This note is password-protected. Its contents are encrypted and cannot be read here.]`);
+      }
       return text(`# ${note.title}\npath: ${note.path}${tags}\n\n${note.body}`);
     }
   );

@@ -1,7 +1,9 @@
 #!/usr/bin/env node
+import fs from "node:fs";
 import { Vault } from "./vault.js";
 import { Indexer } from "./indexer.js";
 import { search } from "./search.js";
+import { isLockedContent, lockContent, unlockContent } from "./notelock.js";
 import { startMcpServer } from "./mcp.js";
 import { startWebServer } from "./server.js";
 import { initIdentity, loginIdentity, loadIdentity, hasIdentity, vortexHome } from "./identity.js";
@@ -26,6 +28,9 @@ Usage:
   vortex-notes index [--vault <dir>]           (Re)build the search index
   vortex-notes search <query> [--vault <dir>] [--keyword]
                                                Search from the terminal
+  vortex-notes unlock <note.md> [--vault <dir>]
+                                               Read a password-protected note (prompts for password)
+  vortex-notes lock <note.md> [--vault <dir>]  Password-protect a note in place
 
   vortex-notes identity init [--name <device>]  Create your identity (shows recovery phrase ONCE)
   vortex-notes identity login [--name <device>] Sign in on this machine with your phrase
@@ -198,6 +203,40 @@ async function main(): Promise<void> {
         console.log(r.snippet.replace(/\n/g, " ").slice(0, 200));
       }
       indexer.close();
+      break;
+    }
+    case "unlock": {
+      requireVault(vault);
+      const rel = args.positional[0];
+      if (!rel) fail("Usage: vortex-notes unlock <note.md>");
+      const abs = vault.abs(rel);
+      if (!fs.existsSync(abs)) fail(`No such note: ${rel}`);
+      const content = fs.readFileSync(abs, "utf8");
+      if (!isLockedContent(content)) {
+        console.log(content); // not locked — just print it
+        break;
+      }
+      const pw = await promptHidden("Password: ");
+      const r = unlockContent(content, pw);
+      if (!r) fail("Wrong password.");
+      const title = vault.readNote(rel).title;
+      console.log(`\n# ${title}\n`);
+      console.log(r.body);
+      break;
+    }
+    case "lock": {
+      requireVault(vault);
+      const rel = args.positional[0];
+      if (!rel) fail("Usage: vortex-notes lock <note.md>");
+      const abs = vault.abs(rel);
+      if (!fs.existsSync(abs)) fail(`No such note: ${rel}`);
+      const content = fs.readFileSync(abs, "utf8");
+      if (isLockedContent(content)) fail("That note is already password-protected.");
+      const pw = await promptHidden("Set a password (lost = unrecoverable): ");
+      if (!pw) fail("No password entered.");
+      if ((await promptHidden("Confirm password: ")) !== pw) fail("Passwords didn't match.");
+      fs.writeFileSync(abs, lockContent(content, pw));
+      console.log(`Locked ${rel}. Its body is now encrypted; unlock with 'vortex-notes unlock ${rel}'.`);
       break;
     }
     case "serve": {

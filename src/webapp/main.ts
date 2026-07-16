@@ -32,6 +32,7 @@ import {
 } from "../crypto.js";
 import { RelayClient } from "../relay/client.js";
 import { slugify, splitFrontmatter, titleFromRaw } from "../textutil.js";
+import { findEnvelope, isLockedContent, wrapLockedBody, LOCK_AAD } from "../notelock.js";
 
 interface DocPayload {
   v: 1;
@@ -215,34 +216,10 @@ let lockedCtx: { key: Uint8Array; salt: Uint8Array } | null = null;
 // Session cache of note passwords: unlocked notes stay unlocked until reload/lock.
 const sessionKeys = new Map<string, { key: Uint8Array; salt: Uint8Array }>();
 
-const LOCK_MARK = "vortex-locked:v1:";
-const LOCK_AAD = "vortex-note-lock-v1";
-
-/** Find the encrypted envelope in a note body, if the note is password-locked. */
-function findEnvelope(body: string): { salt: Uint8Array; ct: Uint8Array } | null {
-  const m = body.match(/^vortex-locked:v1:([A-Za-z0-9+/=]+):([A-Za-z0-9+/=]+)\s*$/m);
-  if (!m) return null;
-  try {
-    return { salt: fromB64(m[1]), ct: fromB64(m[2]) };
-  } catch {
-    return null;
-  }
-}
-
-function isLockedContent(content: string): boolean {
-  return findEnvelope(splitFrontmatter(content).body) !== null;
-}
-
-/** Build a locked body: human hint + the encrypted envelope of the plaintext. */
-function wrapLocked(salt: Uint8Array, key: Uint8Array, plainBody: string): string {
-  const ct = encryptPayload(key, utf8(plainBody), LOCK_AAD);
-  return "🔒 Password-protected — open in Vortex Notes to unlock.\n\n" + LOCK_MARK + toB64(salt) + ":" + toB64(ct);
-}
-
 /** Full content to persist = stashed frontmatter + (re-encrypted) editor body. */
 function editorContent(): string {
   const bodyNow = editor ? editor.state.doc.toString() : "";
-  return editorFmPrefix + (lockedCtx ? wrapLocked(lockedCtx.salt, lockedCtx.key, bodyNow) : bodyNow);
+  return editorFmPrefix + (lockedCtx ? wrapLockedBody(lockedCtx.salt, lockedCtx.key, bodyNow) : bodyNow);
 }
 
 function setSaveState(text: string): void {
