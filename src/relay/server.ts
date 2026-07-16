@@ -542,6 +542,21 @@ function appShell(_nonce: string): string {
   .cm-frontmatter:hover { color:var(--accent); }
   .editnote { font:0.72rem var(--mono); color:var(--ink-faint); margin-top:0.5rem; }
 
+  #acctOverlay { position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:50;
+    display:flex; align-items:center; justify-content:center; padding:1rem; }
+  #acctOverlay[hidden] { display:none; }
+  #acctModal { background:var(--surface); border:1px solid var(--line); border-radius:14px;
+    max-width:27rem; width:100%; padding:1.1rem 1.25rem 1.25rem; box-shadow:0 18px 50px rgba(0,0,0,0.3); }
+  .acctphrase { margin:0.8rem 0; }
+  .acctlabel { font:600 0.6rem var(--mono); letter-spacing:0.12em; text-transform:uppercase;
+    color:var(--ink-faint); margin-bottom:0.4rem; }
+  #phraseReveal.blurred { filter:blur(6px); cursor:pointer; user-select:none; color:var(--ink-faint); }
+  .acctrow { display:flex; gap:1rem; margin-top:0.5rem; }
+  @media (max-width:720px) {
+    #acctOverlay { align-items:flex-end; padding:0; }
+    #acctModal { border-radius:16px 16px 0 0; max-width:none;
+      padding-bottom:calc(1.25rem + env(safe-area-inset-bottom)); }
+  }
   #pairOverlay { position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:50;
     display:flex; align-items:center; justify-content:center; padding:1rem; }
   #pairOverlay[hidden] { display:none; }
@@ -639,6 +654,7 @@ function appShell(_nonce: string): string {
       <div class="menuwrap">
         <button class="iconbtn" id="menuBtn" title="Menu" aria-haspopup="true">⋯</button>
         <div class="menu" id="menu" hidden>
+          <button class="menuitem" id="acctBtn">🔑&ensp;Account &amp; recovery</button>
           <button class="menuitem" id="pairBtn">🤝&ensp;Pair an agent</button>
           <button class="menuitem" id="tipsBtn">✎&ensp;Markdown tips</button>
           <button class="menuitem" id="refreshBtn">⟳&ensp;Pull latest</button>
@@ -655,6 +671,25 @@ function appShell(_nonce: string): string {
     </div>
   </aside>
   <main class="pane" id="pane"><div id="note"><div class="placeholder">Select a note, or create one with ＋</div></div></main>
+</div>
+<div id="acctOverlay" hidden>
+  <div id="acctModal" role="dialog" aria-label="Account and recovery">
+    <div class="tipshead"><strong>Account &amp; recovery</strong><button class="iconbtn" id="acctClose" aria-label="Close">✕</button></div>
+    <p class="tipsintro">Account fingerprint <code id="acctFp"></code> — this confirms which account you're signed into.</p>
+    <div class="acctphrase">
+      <div class="acctlabel">Recovery phrase</div>
+      <div id="phraseReveal" class="phrasebox blurred">tap to reveal</div>
+      <div class="acctrow">
+        <button class="linkbtn" id="acctCopy">copy</button>
+        <button class="linkbtn" id="acctDownload">download .txt</button>
+      </div>
+    </div>
+    <p class="tipsfoot">These 12 words <strong>are</strong> your account — anyone with them can read your
+    notes, and there is no reset if they're lost. They are never sent to any server and never saved in
+    this browser; to see them again after you close this tab, keep your own copy now.</p>
+    <div id="acctNote" class="tipsfoot" hidden>Your phrase isn't held in this session. You saved it when
+    you signed up — open the app fresh and it will ask for it.</div>
+  </div>
 </div>
 <div id="pairOverlay" hidden>
   <div id="pairModal" role="dialog" aria-label="Pair an agent">

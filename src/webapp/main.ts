@@ -47,6 +47,9 @@ let identity: PrincipalIdentity | null = null;
 let client: RelayClient | null = null;
 let spaceKey: Uint8Array | null = null;
 let spaceId: string | null = null;
+// Held in memory for THIS session only (never persisted) so the Account panel
+// can re-reveal the phrase after signup. Cleared on lock/reload.
+let sessionPhrase = "";
 let cursor = 0;
 const notes = new Map<string, DocPayload>();
 let current: string | null = null;
@@ -92,6 +95,7 @@ async function unlock(phrase: string, opts: { createSpaceIfEmpty?: boolean } = {
   status.textContent = "Deriving keys…";
   const account = accountFromPhrase(phrase);
   identity = browserIdentity(phrase);
+  sessionPhrase = phrase.trim().toLowerCase().split(/\s+/).join(" ");
   client = new RelayClient("", identity);
   status.textContent = "Registering this browser as a device…";
   await client.register();
@@ -511,6 +515,50 @@ $("#pairApprove").addEventListener("click", () => {
     window.setTimeout(() => (pairOverlay.hidden = true), 2500);
   })().catch((e) => ($("#pairStatus").textContent = (e as Error).message));
 });
+// --- account & recovery: reveal the session phrase (never persisted) ---
+const acctOverlay = $("#acctOverlay");
+$("#acctBtn").addEventListener("click", () => {
+  if (!identity) return alert("Unlock first.");
+  $("#acctFp").textContent = identity.file.accountSignPub.slice(0, 16) + "…";
+  const reveal = $("#phraseReveal");
+  const hasPhrase = sessionPhrase.length > 0;
+  $("#acctNote").hidden = hasPhrase;
+  reveal.style.display = hasPhrase ? "" : "none";
+  ($("#acctCopy") as HTMLButtonElement).style.display = hasPhrase ? "" : "none";
+  ($("#acctDownload") as HTMLButtonElement).style.display = hasPhrase ? "" : "none";
+  reveal.textContent = "tap to reveal";
+  reveal.classList.add("blurred");
+  acctOverlay.hidden = false;
+});
+$("#phraseReveal").addEventListener("click", () => {
+  const reveal = $("#phraseReveal");
+  if (reveal.classList.contains("blurred")) {
+    reveal.textContent = sessionPhrase;
+    reveal.classList.remove("blurred");
+  } else {
+    reveal.textContent = "tap to reveal";
+    reveal.classList.add("blurred");
+  }
+});
+$("#acctCopy").addEventListener("click", () => {
+  void navigator.clipboard.writeText(sessionPhrase).then(() => {
+    $("#acctCopy").textContent = "copied — clear your clipboard after saving";
+    window.setTimeout(() => ($("#acctCopy").textContent = "copy"), 4000);
+  });
+});
+$("#acctDownload").addEventListener("click", () => {
+  const blob = new Blob([`Vortex Notes recovery phrase\nAccount ${identity?.file.accountSignPub.slice(0, 16)}…\n\n${sessionPhrase}\n\nAnyone with these 12 words can read your notes. There is no reset.\n`], { type: "text/plain" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "vortex-notes-recovery.txt";
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+$("#acctClose").addEventListener("click", () => (acctOverlay.hidden = true));
+acctOverlay.addEventListener("click", (e) => {
+  if (e.target === acctOverlay) acctOverlay.hidden = true;
+});
+
 $("#tipsBtn").addEventListener("click", () => {
   tipsOverlay.hidden = false;
 });
@@ -536,6 +584,7 @@ menu.addEventListener("click", (e) => {
 $("#refreshBtn").addEventListener("click", () => void refresh().catch((e) => alert((e as Error).message)));
 $("#filter").addEventListener("input", (e) => renderList((e.target as HTMLInputElement).value.trim().toLowerCase()));
 $("#lockBtn").addEventListener("click", () => {
+  sessionPhrase = "";
   clearInterval(pollTimer);
   location.reload();
 });
