@@ -261,12 +261,33 @@ test("admin stats: only the configured account can read them", async () => {
     assert.equal(stats.updatesTotal, 1);
     assert.ok(stats.bytesStored > 0);
 
-    // another account is refused
+    // another account is refused — stats, accounts list, and tagging alike
     freshHome();
     const { identity: other } = initIdentity("other");
     const cOther = new RelayClient(base, other);
     await cOther.register();
     await assert.rejects(cOther.getAdminStats(), /Not an admin/);
+    await assert.rejects(cOther.getAdminAccounts(), /Not an admin/);
+    await assert.rejects(cOther.setAdminTag(admin.file.accountSignPub, "test"), /Not an admin/);
+
+    // accounts listing: both accounts, with device names and activity
+    const rows = await cAdmin.getAdminAccounts();
+    assert.equal(rows.length, 2);
+    const adminRow = rows.find((r) => r.account === admin.file.accountSignPub)!;
+    assert.equal(adminRow.principals[0].name, "admin-mac");
+    assert.equal(adminRow.updates, 1);
+    assert.ok(adminRow.lastActive);
+    assert.equal(adminRow.tag, null);
+
+    // tagging: untagged count drops, tag round-trips, clearing restores it
+    assert.equal((await cAdmin.getAdminStats()).newAccounts, 2);
+    await cAdmin.setAdminTag(admin.file.accountSignPub, "mine");
+    await cAdmin.setAdminTag(other.file.accountSignPub, "test");
+    assert.equal((await cAdmin.getAdminStats()).newAccounts, 0);
+    const tagged = await cAdmin.getAdminAccounts();
+    assert.equal(tagged.find((r) => r.account === other.file.accountSignPub)!.tag, "test");
+    await cAdmin.setAdminTag(other.file.accountSignPub, null);
+    assert.equal((await cAdmin.getAdminStats()).newAccounts, 1);
 
     // relay without adminAccount refuses everyone
     const bare = await startRelay({ port: 0 });

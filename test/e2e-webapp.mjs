@@ -9,7 +9,8 @@ const browser = await chromium.launch();
 const page = await browser.newPage();
 const errors = [];
 page.on("pageerror", (e) => errors.push(String(e)));
-page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
+// The admin probe intentionally 403s for non-admin sessions — not an error.
+page.on("console", (m) => { if (m.type() === "error" && !m.text().includes("403")) errors.push(m.text()); });
 
 let failed = false;
 const check = (name, ok) => { console.log(`${ok ? "✓" : "✗"} ${name}`); if (!ok) failed = true; };

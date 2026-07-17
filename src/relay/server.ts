@@ -92,6 +92,11 @@ export async function startRelay(
       createdAt INTEGER NOT NULL,
       approvedBlob TEXT
     );
+    CREATE TABLE IF NOT EXISTS admin_tags (
+      account TEXT PRIMARY KEY,
+      tag TEXT NOT NULL,
+      taggedAt TEXT NOT NULL
+    );
   `);
 
   // Backfill usage counters for accounts created before quotas existed.
@@ -347,11 +352,13 @@ export async function startRelay(
       const rows = db.prepare("SELECT slug, path, title, author, theme, updatedAt FROM public_notes WHERE account=?").all(account);
       return sendJson(res, 200, { published: rows });
     }
-    if (route === "GET /v1/admin/stats") {
+    if (route.includes(" /v1/admin/")) {
       const admins = (opts.adminAccount ?? "").split(",").map((s) => s.trim()).filter(Boolean);
       if (!admins.includes(account)) {
         return sendJson(res, 403, { error: "Not an admin account" });
       }
+    }
+    if (route === "GET /v1/admin/stats") {
       const one = (sql: string, ...args: unknown[]) =>
         (db.prepare(sql).get(...(args as [])) as Record<string, number>) ?? {};
       const dayAgo = new Date(Date.now() - 86400_000).toISOString();
@@ -367,10 +374,43 @@ export async function startRelay(
         bytesStored: one("SELECT COALESCE(SUM(bytesUsed),0) n FROM accounts").n ?? 0,
         publicNotes: one("SELECT COUNT(*) n FROM public_notes").n ?? 0,
         pendingPairings: one("SELECT COUNT(*) n FROM pair_requests WHERE approvedBlob IS NULL").n ?? 0,
+        newAccounts: one("SELECT COUNT(DISTINCT account) n FROM devices WHERE account NOT IN (SELECT account FROM admin_tags)").n ?? 0,
         topAccounts: db
           .prepare("SELECT substr(account,1,8) id, bytesUsed FROM accounts ORDER BY bytesUsed DESC LIMIT 5")
           .all(),
       });
+    }
+    if (route === "GET /v1/admin/accounts") {
+      const rows = db.prepare("SELECT DISTINCT account FROM devices ORDER BY rowid").all() as { account: string }[];
+      const accounts = rows.map(({ account: acc }) => {
+        const principals = (db.prepare("SELECT signPub, cert, createdAt FROM devices WHERE account=? ORDER BY createdAt").all(acc) as
+          { signPub: string; cert: string; createdAt: string }[]).map((r) => {
+          const c = JSON.parse(r.cert) as { name?: string; kind?: string };
+          return { name: c.name ?? "?", kind: c.kind ?? "device", createdAt: r.createdAt };
+        });
+        const act = db.prepare(
+          "SELECT MIN(u.ts) firstTs, MAX(u.ts) lastTs, COUNT(*) n FROM updates u JOIN devices d ON u.author=d.signPub WHERE d.account=?",
+        ).get(acc) as { firstTs: string | null; lastTs: string | null; n: number };
+        return {
+          account: acc,
+          firstSeen: principals[0]?.createdAt ?? null,
+          lastActive: act.lastTs,
+          updates: act.n,
+          bytesUsed: (db.prepare("SELECT bytesUsed FROM accounts WHERE account=?").get(acc) as { bytesUsed: number } | undefined)?.bytesUsed ?? 0,
+          principals,
+          publicTitles: (db.prepare("SELECT title FROM public_notes WHERE account=?").all(acc) as { title: string }[]).map((r) => r.title),
+          tag: (db.prepare("SELECT tag FROM admin_tags WHERE account=?").get(acc) as { tag: string } | undefined)?.tag ?? null,
+        };
+      });
+      return sendJson(res, 200, { accounts });
+    }
+    if (route === "PUT /v1/admin/tag") {
+      const { account: target, tag } = parse(body) as { account?: string; tag?: string };
+      if (!target) return sendJson(res, 400, { error: "account required" });
+      if (!tag) db.prepare("DELETE FROM admin_tags WHERE account=?").run(target);
+      else db.prepare("INSERT INTO admin_tags (account, tag, taggedAt) VALUES (?, ?, ?) ON CONFLICT(account) DO UPDATE SET tag=excluded.tag, taggedAt=excluded.taggedAt")
+        .run(target, tag, new Date().toISOString());
+      return sendJson(res, 200, { ok: true });
     }
     if (route === "GET /v1/usage") {
       return sendJson(res, 200, { bytesUsed: usageOf(account), quotaBytes: quota });
@@ -644,9 +684,21 @@ function appShell(_nonce: string): string {
   .statcard { border:1px solid var(--line); border-radius:9px; padding:0.6rem 0.75rem; }
   .statcard b { display:block; font:700 1.25rem var(--sans); font-variant-numeric:tabular-nums; }
   .statcard span { font:600 0.6rem var(--mono); letter-spacing:0.1em; text-transform:uppercase; color:var(--ink-faint); }
+  .adminaccts { max-height:16rem; overflow-y:auto; display:flex; flex-direction:column; gap:0.45rem; }
+  .adrow { border:1px solid var(--line); border-radius:9px; padding:0.5rem 0.65rem; }
+  .adrow .l1 { display:flex; align-items:center; gap:0.5rem; }
+  .adrow code { font:600 0.72rem var(--mono); }
+  .adrow .meta { font:0.68rem var(--mono); color:var(--ink-faint); margin-top:0.2rem; word-break:break-word; }
+  .tagchip { font:600 0.58rem var(--mono); letter-spacing:0.08em; text-transform:uppercase; border-radius:99px;
+    padding:0.12rem 0.5rem; border:1px solid var(--line); color:var(--ink-faint); }
+  .tagchip.new { color:var(--accent); border-color:var(--accent); }
+  .tagbtns { margin-left:auto; display:flex; gap:0.25rem; }
+  .tagbtns button { font:600 0.62rem var(--mono); background:none; border:1px solid var(--line); border-radius:6px;
+    color:var(--ink-faint); padding:0.18rem 0.45rem; cursor:pointer; }
+  .tagbtns button:hover { color:var(--accent); border-color:var(--accent); }
   @media (max-width:720px) {
     #adminOverlay { align-items:flex-end; padding:0; }
-    #adminModal { border-radius:16px 16px 0 0; max-width:none; padding-bottom:calc(1.25rem + env(safe-area-inset-bottom)); }
+    #adminModal { border-radius:16px 16px 0 0; max-width:none; padding-bottom:calc(1.25rem + env(safe-area-inset-bottom)); max-height:85dvh; overflow-y:auto; }
   }
   #agentsOverlay { position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:56;
     display:flex; align-items:center; justify-content:center; padding:1rem; }
@@ -966,8 +1018,9 @@ function appShell(_nonce: string): string {
   <div id="adminModal" role="dialog" aria-label="Admin stats">
     <div class="tipshead"><strong>Relay stats</strong><button class="iconbtn" id="adminClose" aria-label="Close">${icon("x")}</button></div>
     <div id="adminGrid" class="admingrid"></div>
-    <div class="acctlabel" style="margin-top:0.9rem">Top accounts by storage</div>
-    <div id="adminTop" class="tipsfoot"></div>
+    <div class="acctlabel" style="margin-top:0.9rem">Accounts</div>
+    <p class="tipsintro" style="margin:0.2rem 0 0.4rem">Tag your own accounts once — anything untagged after that is a real user.</p>
+    <div id="adminAccts" class="adminaccts"></div>
   </div>
 </div>
 <div id="agentsOverlay" hidden>

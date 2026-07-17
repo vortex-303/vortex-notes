@@ -62,6 +62,23 @@ let editor: EditorView | null = null;
 let pollTimer: number | undefined;
 
 // ---------- identity ----------
+// Self-reported, but far more useful than "browser@host" when telling devices
+// apart in the Agents panel and admin view.
+function browserDeviceName(): string {
+  const ua = navigator.userAgent;
+  const browser = /Edg\//.test(ua) ? "Edge"
+    : /OPR\//.test(ua) ? "Opera"
+    : /Chrome\//.test(ua) ? "Chrome"
+    : /Firefox\//.test(ua) ? "Firefox"
+    : /Safari\//.test(ua) ? "Safari" : "browser";
+  const os = /Android/.test(ua) ? "Android"
+    : /iPhone|iPad|iPod/.test(ua) ? "iOS"
+    : /Mac OS X/.test(ua) ? "macOS"
+    : /Windows/.test(ua) ? "Windows"
+    : /Linux/.test(ua) ? "Linux" : "web";
+  return `${browser} · ${os}`;
+}
+
 function browserIdentity(phrase: string): PrincipalIdentity {
   const account = accountFromPhrase(phrase);
   const stored = localStorage.getItem("vn-device");
@@ -90,7 +107,7 @@ function browserIdentity(phrase: string): PrincipalIdentity {
   }
   const deviceSign = randomSignKeypair();
   const deviceBox = randomBoxKeypair();
-  const device = certifyDevice(account, deviceSign, deviceBox, `browser@${location.host}`);
+  const device = certifyDevice(account, deviceSign, deviceBox, browserDeviceName());
   localStorage.setItem(
     "vn-device",
     JSON.stringify({
@@ -1129,28 +1146,57 @@ async function probeAdmin(): Promise<void> {
     ($("#adminBtn") as HTMLElement).hidden = false;
   } catch { /* not admin — item stays hidden */ }
 }
+async function renderAdmin(): Promise<void> {
+  if (!client) return;
+  const [st, accts] = await Promise.all([client.getAdminStats(), client.getAdminAccounts()]);
+  const s = st as Record<string, number>;
+  const card = (label: string, val: string | number, hot = false) =>
+    `<div class="statcard"><b${hot ? ' style="color:var(--accent)"' : ""}>${val}</b><span>${label}</span></div>`;
+  $("#adminGrid").innerHTML =
+    card("accounts", s.accounts) +
+    card("new · untagged", s.newAccounts, s.newAccounts > 0) +
+    card("devices", s.devices) +
+    card("agents", s.agents) +
+    card("updates · 24h", s.updates24h) +
+    card("updates · 7d", s.updates7d) +
+    card("stored", (s.bytesStored / 1e6).toFixed(1) + " MB") +
+    card("public notes", s.publicNotes) +
+    card("pending pairings", s.pendingPairings) +
+    card("spaces", s.spaces);
+  const day = (iso: string | null) => (iso ? iso.slice(0, 10) : "never");
+  $("#adminAccts").innerHTML = accts
+    .map((a) => {
+      const chip = a.tag
+        ? `<span class="tagchip">${esc(a.tag)}</span>`
+        : '<span class="tagchip new">new</span>';
+      const devices = a.principals.filter((p) => p.kind !== "agent").map((p) => esc(p.name)).join(", ");
+      const agents = a.principals.filter((p) => p.kind === "agent").map((p) => esc(p.name)).join(", ");
+      const pubs = a.publicTitles.length ? ` · public: ${a.publicTitles.map(esc).join(", ")}` : "";
+      return `<div class="adrow" data-acct="${esc(a.account)}">
+        <div class="l1"><code>${esc(a.account.slice(0, 8))}</code>${chip}
+          <div class="tagbtns">
+            <button data-tag="mine">mine</button><button data-tag="test">test</button>${a.tag ? '<button data-tag="">clear</button>' : ""}
+          </div></div>
+        <div class="meta">${day(a.firstSeen)} → ${day(a.lastActive)} · ${a.updates} upd · ${(a.bytesUsed / 1000).toFixed(1)} KB<br>
+          ${devices || "no devices"}${agents ? ` · agents: ${agents}` : ""}${pubs}</div>
+      </div>`;
+    })
+    .join("") || '<div class="tipsintro">No accounts yet.</div>';
+}
 $("#adminBtn").addEventListener("click", () => {
   if (!client) return;
   $("#adminGrid").innerHTML = '<div class="tipsintro">Loading…</div>';
+  $("#adminAccts").innerHTML = "";
   adminOverlay.hidden = false;
-  void client.getAdminStats().then((st) => {
-    const s = st as Record<string, number> & { topAccounts: { id: string; bytesUsed: number }[] };
-    const card = (label: string, val: string | number) => `<div class="statcard"><b>${val}</b><span>${label}</span></div>`;
-    $("#adminGrid").innerHTML =
-      card("accounts", s.accounts) +
-      card("devices", s.devices) +
-      card("agents", s.agents) +
-      card("spaces", s.spaces) +
-      card("updates · total", s.updatesTotal) +
-      card("updates · 24h", s.updates24h) +
-      card("updates · 7d", s.updates7d) +
-      card("stored", (s.bytesStored / 1e6).toFixed(1) + " MB") +
-      card("public notes", s.publicNotes) +
-      card("pending pairings", s.pendingPairings);
-    $("#adminTop").innerHTML = (s.topAccounts ?? [])
-      .map((a) => `<code>${esc(a.id)}…</code> ${(a.bytesUsed / 1e6).toFixed(2)} MB`)
-      .join("<br>") || "—";
-  }).catch((e) => ($("#adminGrid").innerHTML = `<div class="lockerr">${esc((e as Error).message)}</div>`));
+  void renderAdmin().catch((e) => ($("#adminGrid").innerHTML = `<div class="lockerr">${esc((e as Error).message)}</div>`));
+});
+$("#adminAccts").addEventListener("click", (e) => {
+  const btn = (e.target as HTMLElement).closest("[data-tag]") as HTMLElement | null;
+  if (!btn || !client) return;
+  const acct = (btn.closest(".adrow") as HTMLElement).dataset.acct!;
+  void client.setAdminTag(acct, btn.dataset.tag || null)
+    .then(() => renderAdmin())
+    .catch((err) => alert((err as Error).message));
 });
 $("#adminClose").addEventListener("click", () => (adminOverlay.hidden = true));
 adminOverlay.addEventListener("click", (e) => { if (e.target === adminOverlay) adminOverlay.hidden = true; });

@@ -7,6 +7,17 @@ import { sign, toHex, utf8, toB64, fromB64 } from "../crypto.js";
 import type { PrincipalIdentity } from "../account.js";
 import type { SpaceRecord } from "../spaces.js";
 
+export interface AdminAccountRow {
+  account: string;
+  firstSeen: string | null;
+  lastActive: string | null;
+  updates: number;
+  bytesUsed: number;
+  principals: { name: string; kind: string; createdAt: string }[];
+  publicTitles: string[];
+  tag: string | null;
+}
+
 export interface RemoteUpdate {
   seq: number;
   doc: string;
@@ -91,6 +102,15 @@ export class RelayClient {
   async getAdminStats(): Promise<Record<string, unknown>> {
     const res = await ok(await this.signed("GET", "/v1/admin/stats"));
     return (await res.json()) as Record<string, unknown>;
+  }
+
+  async getAdminAccounts(): Promise<AdminAccountRow[]> {
+    const res = await ok(await this.signed("GET", "/v1/admin/accounts"));
+    return ((await res.json()) as { accounts: AdminAccountRow[] }).accounts;
+  }
+
+  async setAdminTag(account: string, tag: string | null): Promise<void> {
+    await ok(await this.signed("PUT", "/v1/admin/tag", { account, tag: tag ?? undefined }));
   }
 
   async getUsage(): Promise<{ bytesUsed: number; quotaBytes: number | null }> {
