@@ -38,6 +38,7 @@ try {
   await page.waitForSelector("#userMenu:not([hidden])");
   check("user menu opens with account/agents/theme items", await page.isVisible("#acctBtn") && await page.isVisible("#agentsBtn") && await page.isVisible("#lockBtn"));
   check("storage row shows a value", /MB|—/.test(await page.textContent("#umStorage")));
+  check("admin item invisible for non-admin (CSS truly hides [hidden])", !(await page.isVisible("#adminBtn")));
 
   // agents & devices panel lists this device
   await page.click("#agentsBtn");

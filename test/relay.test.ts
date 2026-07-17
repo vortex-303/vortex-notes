@@ -245,7 +245,8 @@ test("public notes: publish, themed page, stable slug on update, unpublish, scop
 test("admin stats: only the configured account can read them", async () => {
   freshHome();
   const { identity: admin } = initIdentity("admin-mac");
-  const relay = await startRelay({ port: 0, adminAccount: admin.file.accountSignPub });
+  // comma-separated list with sloppy spacing — any listed account is admin
+  const relay = await startRelay({ port: 0, adminAccount: ` ${"ab".repeat(32)}, ${admin.file.accountSignPub} ` });
   const base = `http://127.0.0.1:${relay.port}`;
   try {
     const cAdmin = new RelayClient(base, admin);

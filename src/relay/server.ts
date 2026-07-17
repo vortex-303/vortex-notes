@@ -348,7 +348,8 @@ export async function startRelay(
       return sendJson(res, 200, { published: rows });
     }
     if (route === "GET /v1/admin/stats") {
-      if (!opts.adminAccount || account !== opts.adminAccount) {
+      const admins = (opts.adminAccount ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+      if (!admins.includes(account)) {
         return sendJson(res, 403, { error: "Not an admin account" });
       }
       const one = (sql: string, ...args: unknown[]) =>
@@ -619,6 +620,7 @@ function appShell(_nonce: string): string {
     background:var(--surface); border:1px solid var(--line); border-radius:11px;
     box-shadow:0 12px 34px rgba(0,0,0,0.2); padding:0.25rem; }
   .usermenu[hidden] { display:none; }
+  [hidden] { display:none !important; }
   .umsection { padding:0.15rem; } .umsection + .umsection { border-top:1px solid var(--line); }
   .usermenu .menuitem { display:flex; align-items:center; gap:0.6rem; width:100%; text-align:left;
     background:none; border:none; color:var(--ink); font:0.85rem var(--sans); padding:0.55rem 0.7rem;
