@@ -35,6 +35,8 @@ export interface RelayOptions {
   dbPath?: string; // default in-memory
   /** per-account ciphertext cap in bytes; undefined/0 = unlimited (self-host default) */
   quotaBytes?: number;
+  /** accountSignPub (hex) allowed to read /v1/admin/stats; unset = endpoint disabled */
+  adminAccount?: string;
 }
 
 export async function startRelay(
@@ -345,6 +347,30 @@ export async function startRelay(
       const rows = db.prepare("SELECT slug, path, title, author, theme, updatedAt FROM public_notes WHERE account=?").all(account);
       return sendJson(res, 200, { published: rows });
     }
+    if (route === "GET /v1/admin/stats") {
+      if (!opts.adminAccount || account !== opts.adminAccount) {
+        return sendJson(res, 403, { error: "Not an admin account" });
+      }
+      const one = (sql: string, ...args: unknown[]) =>
+        (db.prepare(sql).get(...(args as [])) as Record<string, number>) ?? {};
+      const dayAgo = new Date(Date.now() - 86400_000).toISOString();
+      const weekAgo = new Date(Date.now() - 7 * 86400_000).toISOString();
+      return sendJson(res, 200, {
+        accounts: one("SELECT COUNT(*) n FROM accounts").n ?? 0,
+        devices: one("SELECT COUNT(*) n FROM devices WHERE cert NOT LIKE '%\"kind\":\"agent\"%'").n ?? 0,
+        agents: one("SELECT COUNT(*) n FROM devices WHERE cert LIKE '%\"kind\":\"agent\"%'").n ?? 0,
+        spaces: one("SELECT COUNT(*) n FROM spaces").n ?? 0,
+        updatesTotal: one("SELECT COUNT(*) n FROM updates").n ?? 0,
+        updates24h: one("SELECT COUNT(*) n FROM updates WHERE ts > ?", dayAgo).n ?? 0,
+        updates7d: one("SELECT COUNT(*) n FROM updates WHERE ts > ?", weekAgo).n ?? 0,
+        bytesStored: one("SELECT COALESCE(SUM(bytesUsed),0) n FROM accounts").n ?? 0,
+        publicNotes: one("SELECT COUNT(*) n FROM public_notes").n ?? 0,
+        pendingPairings: one("SELECT COUNT(*) n FROM pair_requests WHERE approvedBlob IS NULL").n ?? 0,
+        topAccounts: db
+          .prepare("SELECT substr(account,1,8) id, bytesUsed FROM accounts ORDER BY bytesUsed DESC LIMIT 5")
+          .all(),
+      });
+    }
     if (route === "GET /v1/usage") {
       return sendJson(res, 200, { bytesUsed: usageOf(account), quotaBytes: quota });
     }
@@ -607,6 +633,19 @@ function appShell(_nonce: string): string {
   .agentrow .an { font:600 0.85rem var(--sans); }
   .agentrow .am { font:0.68rem var(--mono); color:var(--ink-faint); }
   .agentrow .col { flex:1; min-width:0; } .agentrow .col > * { display:block; }
+  #adminOverlay { position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:56;
+    display:flex; align-items:center; justify-content:center; padding:1rem; }
+  #adminOverlay[hidden] { display:none; }
+  #adminModal { background:var(--surface); border:1px solid var(--line); border-radius:14px;
+    max-width:26rem; width:100%; padding:1.1rem 1.25rem 1.25rem; box-shadow:0 18px 50px rgba(0,0,0,0.35); }
+  .admingrid { display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; margin-top:0.6rem; }
+  .statcard { border:1px solid var(--line); border-radius:9px; padding:0.6rem 0.75rem; }
+  .statcard b { display:block; font:700 1.25rem var(--sans); font-variant-numeric:tabular-nums; }
+  .statcard span { font:600 0.6rem var(--mono); letter-spacing:0.1em; text-transform:uppercase; color:var(--ink-faint); }
+  @media (max-width:720px) {
+    #adminOverlay { align-items:flex-end; padding:0; }
+    #adminModal { border-radius:16px 16px 0 0; max-width:none; padding-bottom:calc(1.25rem + env(safe-area-inset-bottom)); }
+  }
   #agentsOverlay { position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:56;
     display:flex; align-items:center; justify-content:center; padding:1rem; }
   #agentsOverlay[hidden] { display:none; }
@@ -864,6 +903,7 @@ function appShell(_nonce: string): string {
         </div>
         <div class="umsection">
           <button class="menuitem" id="agentsBtn">${icon("agent")}<span>Agents &amp; devices</span></button>
+          <button class="menuitem" id="adminBtn" hidden>${icon("storage")}<span>Admin stats</span></button>
         </div>
         <div class="umsection">
           <button class="menuitem" id="themeBtn">${icon("theme")}<span>Theme</span></button>
@@ -918,6 +958,14 @@ function appShell(_nonce: string): string {
       <button id="pairApprove" class="pairgo">Approve</button>
     </div>
     <div id="pairStatus" class="tipsfoot"></div>
+  </div>
+</div>
+<div id="adminOverlay" hidden>
+  <div id="adminModal" role="dialog" aria-label="Admin stats">
+    <div class="tipshead"><strong>Relay stats</strong><button class="iconbtn" id="adminClose" aria-label="Close">${icon("x")}</button></div>
+    <div id="adminGrid" class="admingrid"></div>
+    <div class="acctlabel" style="margin-top:0.9rem">Top accounts by storage</div>
+    <div id="adminTop" class="tipsfoot"></div>
   </div>
 </div>
 <div id="agentsOverlay" hidden>

@@ -167,6 +167,7 @@ async function enterApp(): Promise<void> {
   $("#lock").style.display = "none";
   $("#main").style.display = "flex";
   paintUserIdentity();
+  void probeAdmin();
   pollTimer = window.setInterval(() => void refresh().catch(() => undefined), 30_000);
 }
 
@@ -1118,6 +1119,41 @@ $("#nameBtn").addEventListener("click", () => {
   }
 });
 $("#agentsBtn").addEventListener("click", () => void openAgentsPanel());
+
+// --- admin stats (menu item appears only if the relay says we're admin) ---
+const adminOverlay = $("#adminOverlay");
+async function probeAdmin(): Promise<void> {
+  if (!client) return;
+  try {
+    await client.getAdminStats();
+    ($("#adminBtn") as HTMLElement).hidden = false;
+  } catch { /* not admin — item stays hidden */ }
+}
+$("#adminBtn").addEventListener("click", () => {
+  if (!client) return;
+  $("#adminGrid").innerHTML = '<div class="tipsintro">Loading…</div>';
+  adminOverlay.hidden = false;
+  void client.getAdminStats().then((st) => {
+    const s = st as Record<string, number> & { topAccounts: { id: string; bytesUsed: number }[] };
+    const card = (label: string, val: string | number) => `<div class="statcard"><b>${val}</b><span>${label}</span></div>`;
+    $("#adminGrid").innerHTML =
+      card("accounts", s.accounts) +
+      card("devices", s.devices) +
+      card("agents", s.agents) +
+      card("spaces", s.spaces) +
+      card("updates · total", s.updatesTotal) +
+      card("updates · 24h", s.updates24h) +
+      card("updates · 7d", s.updates7d) +
+      card("stored", (s.bytesStored / 1e6).toFixed(1) + " MB") +
+      card("public notes", s.publicNotes) +
+      card("pending pairings", s.pendingPairings);
+    $("#adminTop").innerHTML = (s.topAccounts ?? [])
+      .map((a) => `<code>${esc(a.id)}…</code> ${(a.bytesUsed / 1e6).toFixed(2)} MB`)
+      .join("<br>") || "—";
+  }).catch((e) => ($("#adminGrid").innerHTML = `<div class="lockerr">${esc((e as Error).message)}</div>`));
+});
+$("#adminClose").addEventListener("click", () => (adminOverlay.hidden = true));
+adminOverlay.addEventListener("click", (e) => { if (e.target === adminOverlay) adminOverlay.hidden = true; });
 
 $("#refreshBtn").addEventListener("click", () => void refresh().catch((e) => alert((e as Error).message)));
 $("#filter").addEventListener("input", (e) => renderList((e.target as HTMLInputElement).value.trim().toLowerCase()));

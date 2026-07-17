@@ -88,6 +88,11 @@ export class RelayClient {
     return ((await res.json()) as { published: { slug: string; path: string; title: string; author: string | null; theme: string; updatedAt: string }[] }).published;
   }
 
+  async getAdminStats(): Promise<Record<string, unknown>> {
+    const res = await ok(await this.signed("GET", "/v1/admin/stats"));
+    return (await res.json()) as Record<string, unknown>;
+  }
+
   async getUsage(): Promise<{ bytesUsed: number; quotaBytes: number | null }> {
     const res = await ok(await this.signed("GET", "/v1/usage"));
     return (await res.json()) as { bytesUsed: number; quotaBytes: number | null };

@@ -242,6 +242,45 @@ test("public notes: publish, themed page, stable slug on update, unpublish, scop
   }
 });
 
+test("admin stats: only the configured account can read them", async () => {
+  freshHome();
+  const { identity: admin } = initIdentity("admin-mac");
+  const relay = await startRelay({ port: 0, adminAccount: admin.file.accountSignPub });
+  const base = `http://127.0.0.1:${relay.port}`;
+  try {
+    const cAdmin = new RelayClient(base, admin);
+    await cAdmin.register();
+    const space = createSpace(admin, "s");
+    await cAdmin.createSpace(space);
+    const key = openSpaceKey(admin, space);
+    await cAdmin.pushUpdate(space.id, "a.md", encryptDoc(key, "a.md", "hello"));
+
+    const stats = (await cAdmin.getAdminStats()) as Record<string, number>;
+    assert.equal(stats.accounts, 1);
+    assert.equal(stats.updatesTotal, 1);
+    assert.ok(stats.bytesStored > 0);
+
+    // another account is refused
+    freshHome();
+    const { identity: other } = initIdentity("other");
+    const cOther = new RelayClient(base, other);
+    await cOther.register();
+    await assert.rejects(cOther.getAdminStats(), /Not an admin/);
+
+    // relay without adminAccount refuses everyone
+    const bare = await startRelay({ port: 0 });
+    try {
+      const cBare = new RelayClient(`http://127.0.0.1:${bare.port}`, admin);
+      await cBare.register();
+      await assert.rejects(cBare.getAdminStats(), /Not an admin/);
+    } finally {
+      await bare.close();
+    }
+  } finally {
+    await relay.close();
+  }
+});
+
 test("quota: pushes are rejected past the cap; usage endpoint reports", async () => {
   const relay = await startRelay({ port: 0, quotaBytes: 2000 });
   const base = `http://127.0.0.1:${relay.port}`;
