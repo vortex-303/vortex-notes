@@ -696,6 +696,29 @@ function appShell(_nonce: string): string {
   .tagbtns button { font:600 0.62rem var(--mono); background:none; border:1px solid var(--line); border-radius:6px;
     color:var(--ink-faint); padding:0.18rem 0.45rem; cursor:pointer; }
   .tagbtns button:hover { color:var(--accent); border-color:var(--accent); }
+  #histOverlay { position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:58;
+    display:flex; align-items:center; justify-content:center; padding:1rem; }
+  #histOverlay[hidden] { display:none; }
+  #histModal { background:var(--surface); border:1px solid var(--line); border-radius:14px;
+    max-width:30rem; width:100%; max-height:85dvh; overflow-y:auto;
+    padding:1.1rem 1.25rem 1.25rem; box-shadow:0 18px 50px rgba(0,0,0,0.35); }
+  .histlist { max-height:11rem; overflow-y:auto; display:flex; flex-direction:column; gap:0.3rem; margin-top:0.5rem; }
+  .histrow { display:flex; align-items:center; gap:0.5rem; width:100%; text-align:left; cursor:pointer;
+    background:none; border:1px solid var(--line); border-radius:8px; padding:0.45rem 0.6rem; color:var(--ink); }
+  .histrow:hover, .histrow.sel { border-color:var(--accent); }
+  .histrow .hwhen { font:600 0.72rem var(--mono); }
+  .histrow .hmeta { margin-left:auto; font:0.66rem var(--mono); color:var(--ink-faint); }
+  .tagchip.open { color:var(--accent); border-color:var(--accent); }
+  .histpreview { margin-top:0.7rem; }
+  .histarticle { border:1px solid var(--line); border-radius:9px; padding:0.7rem 0.9rem;
+    max-height:14rem; overflow-y:auto; font-size:0.85rem; }
+  .lostpw { background:none; border:none; color:var(--ink-faint); font:0.75rem var(--sans);
+    text-decoration:underline; cursor:pointer; margin-top:0.9rem; }
+  .lostpw:hover { color:var(--accent); }
+  @media (max-width:720px) {
+    #histOverlay { align-items:flex-end; padding:0; }
+    #histModal { border-radius:16px 16px 0 0; max-width:none; padding-bottom:calc(1.25rem + env(safe-area-inset-bottom)); }
+  }
   @media (max-width:720px) {
     #adminOverlay { align-items:flex-end; padding:0; }
     #adminModal { border-radius:16px 16px 0 0; max-width:none; padding-bottom:calc(1.25rem + env(safe-area-inset-bottom)); max-height:85dvh; overflow-y:auto; }
@@ -1021,6 +1044,15 @@ function appShell(_nonce: string): string {
     <div class="acctlabel" style="margin-top:0.9rem">Accounts</div>
     <p class="tipsintro" style="margin:0.2rem 0 0.4rem">Tag your own accounts once — anything untagged after that is a real user.</p>
     <div id="adminAccts" class="adminaccts"></div>
+  </div>
+</div>
+<div id="histOverlay" hidden>
+  <div id="histModal" role="dialog" aria-label="Note history">
+    <div class="tipshead"><strong>History</strong><button class="iconbtn" id="histClose" aria-label="Close">${icon("x")}</button></div>
+    <p class="tipsintro">Every saved version, newest first. Restoring never loses anything — the current version stays in history too.</p>
+    <div id="histList" class="histlist"></div>
+    <div id="histPreview" class="histpreview"></div>
+    <button id="histRestore" class="pairgo" hidden>${icon("check")} Restore this version</button>
   </div>
 </div>
 <div id="agentsOverlay" hidden>

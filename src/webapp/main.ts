@@ -485,7 +485,8 @@ function showLockScreen(path: string, n: DocPayload, env: { salt: Uint8Array; ct
     `<p>This note is password-protected.</p>` +
     `<input id="unlockPw" type="password" placeholder="Password" autocomplete="off">` +
     `<button id="unlockGo" class="mbtn primary">Unlock</button>` +
-    `<div id="unlockErr" class="lockerr"></div></div>`;
+    `<div id="unlockErr" class="lockerr"></div>` +
+    `<button id="lostPwBtn" class="lostpw">Lost the password? Recover an earlier version</button></div>`;
   const attempt = () => {
     const pw = ($("#unlockPw") as HTMLInputElement).value;
     if (!pw) return;
@@ -517,6 +518,7 @@ function showLockScreen(path: string, n: DocPayload, env: { salt: Uint8Array; ct
     }, 20);
   };
   $("#unlockGo").addEventListener("click", attempt);
+  $("#lostPwBtn").addEventListener("click", () => void openHistory(path).catch((e) => alert((e as Error).message)));
   ($("#unlockPw") as HTMLInputElement).addEventListener("keydown", (e) => {
     if ((e as KeyboardEvent).key === "Enter") attempt();
   });
@@ -533,6 +535,104 @@ function showLockScreen(path: string, n: DocPayload, env: { salt: Uint8Array; ct
   setMobileNoteOpen(true);
   renderList(($("#filter") as HTMLInputElement).value.trim().toLowerCase());
 }
+
+// ---------- version history ----------
+// Every push is retained on the relay, encrypted with the space key — so any
+// version from before a password was applied is recoverable without it.
+interface HistVersion { seq: number; ts: string; author: string; content: string; deleted: boolean; locked: boolean }
+let histVersions: HistVersion[] = [];
+let histSel = -1;
+let histPath = "";
+
+async function openHistory(path: string): Promise<void> {
+  if (!client || !spaceKey || !spaceId) return;
+  histPath = path;
+  histSel = -1;
+  $("#histList").innerHTML = '<div class="tipsintro">Loading history…</div>';
+  $("#histPreview").innerHTML = "";
+  ($("#histRestore") as HTMLButtonElement).hidden = true;
+  $("#histOverlay").hidden = false;
+  const names = new Map<string, string>();
+  try {
+    for (const p of await client.listPrincipals()) names.set(p.signPub, p.name);
+  } catch { /* names are a nicety, not required */ }
+  const updates = await client.pullUpdates(spaceId, 0, path);
+  histVersions = [];
+  for (const u of updates) {
+    try {
+      const payload = JSON.parse(
+        new TextDecoder().decode(decryptPayload(spaceKey, u.blob, `vortex-doc-v1:${u.doc}`))
+      ) as DocPayload;
+      histVersions.push({
+        seq: u.seq,
+        ts: u.ts,
+        author: names.get(u.author) ?? u.author.slice(0, 8),
+        content: payload.content ?? "",
+        deleted: !!payload.deleted,
+        locked: !payload.deleted && findEnvelope(splitFrontmatter(payload.content ?? "").body) !== null,
+      });
+    } catch { /* skip undecryptable updates */ }
+  }
+  histVersions.reverse(); // newest first
+  const when = (iso: string) => `${iso.slice(0, 10)} · ${iso.slice(11, 16)}`;
+  $("#histList").innerHTML = histVersions
+    .map((v, i) => {
+      const chip = v.deleted
+        ? '<span class="tagchip">deleted</span>'
+        : v.locked
+          ? '<span class="tagchip">locked</span>'
+          : '<span class="tagchip open">readable</span>';
+      return `<button class="histrow" data-i="${i}">
+        <span class="hwhen">${when(v.ts)}</span>${chip}
+        <span class="hmeta">${esc(v.author)} · ${(v.content.length / 1000).toFixed(1)} KB</span>
+      </button>`;
+    })
+    .join("") || '<div class="tipsintro">No history for this note yet.</div>';
+}
+
+function selectHistVersion(i: number): void {
+  histSel = i;
+  const v = histVersions[i];
+  document.querySelectorAll(".histrow").forEach((el, j) => el.classList.toggle("sel", j === i));
+  const restore = $("#histRestore") as HTMLButtonElement;
+  if (v.deleted) {
+    $("#histPreview").innerHTML = '<div class="tipsintro">This version is a deletion.</div>';
+    restore.hidden = true;
+    return;
+  }
+  if (v.locked) {
+    $("#histPreview").innerHTML =
+      '<div class="tipsintro">This version is password-protected — pick an earlier, readable one.</div>';
+    restore.hidden = true;
+    return;
+  }
+  const { body } = splitFrontmatter(v.content);
+  $("#histPreview").innerHTML = `<article class="histarticle">${marked.parse(body, { async: false }) as string}</article>`;
+  restore.hidden = false;
+}
+
+$("#histList").addEventListener("click", (e) => {
+  const row = (e.target as HTMLElement).closest(".histrow") as HTMLElement | null;
+  if (row) selectHistVersion(Number(row.dataset.i));
+});
+$("#histRestore").addEventListener("click", () => {
+  const v = histVersions[histSel];
+  if (!v || !histPath) return;
+  if (!confirm("Restore this version? The current version stays in history.")) return;
+  void pushNote(histPath, v.content)
+    .then(() => {
+      sessionKeys.delete(histPath);
+      $("#histOverlay").hidden = true;
+      republishIfPublic(histPath);
+      renderList();
+      openNote(histPath);
+    })
+    .catch((e) => alert((e as Error).message));
+});
+$("#histClose").addEventListener("click", () => ($("#histOverlay").hidden = true));
+$("#histOverlay").addEventListener("click", (e) => {
+  if (e.target === $("#histOverlay")) $("#histOverlay").hidden = true;
+});
 
 /** Reading view: fully rendered markdown; tap the text to go back to live editing. */
 function openReader(path: string): void {
@@ -572,6 +672,7 @@ function noteMenuHtml(locked: boolean, path?: string): string {
     `<div class="notemenu" id="noteMenu" hidden>` +
     `<button class="menuitem" id="renameBtn">${icon('edit')} Rename / move</button>` +
     `<button class="menuitem" id="dupBtn">${icon('copy')} Duplicate</button>` +
+    `<button class="menuitem" id="histBtn">${icon('refresh')} History</button>` +
     (locked
       ? `<button class="menuitem" id="lockNowBtn">${icon('lock')} Lock now</button>` +
         `<button class="menuitem" id="unlockPermBtn">${icon('unlock')} Remove password</button>`
@@ -727,6 +828,7 @@ function wireCommonNoteButtons(path: string): void {
       });
     });
     document.getElementById("pubBtn")?.addEventListener("click", () => openPublishModal(path));
+    document.getElementById("histBtn")?.addEventListener("click", () => void openHistory(path).catch((e) => alert((e as Error).message)));
   }
   $("#delBtn").addEventListener("click", () => {
     if (!confirm(`Delete ${path} everywhere?`)) return;
