@@ -99,6 +99,10 @@ export class RelayClient {
     return ((await res.json()) as { published: { slug: string; path: string; title: string; author: string | null; theme: string; updatedAt: string }[] }).published;
   }
 
+  async transferSpace(spaceId: string, toAccount: string): Promise<void> {
+    await ok(await this.signed("POST", `/v1/spaces/${spaceId}/transfer`, { toAccount }));
+  }
+
   async getAdminStats(): Promise<Record<string, unknown>> {
     const res = await ok(await this.signed("GET", "/v1/admin/stats"));
     return (await res.json()) as Record<string, unknown>;

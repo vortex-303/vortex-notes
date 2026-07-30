@@ -440,17 +440,53 @@ export async function startRelay(
       ? ([rawMatch[0], rawMatch[1], rawMatch[2] ? decodeURIComponent(rawMatch[2]) : undefined] as const)
       : null;
 
+    // Membership model: a principal can see/use a space if their account owns
+    // it OR their device/account key appears in sealedKeys — the seals ARE the
+    // ACL (you can only ever read what you can unseal). This keeps every
+    // signed-in device working across an account rotation.
+    const isMember = (row: { account: string; sealedKeys: string }): boolean => {
+      if (row.account === account) return true;
+      try {
+        const sk = JSON.parse(row.sealedKeys) as Record<string, string>;
+        return devicePub in sk || account in sk;
+      } catch {
+        return false;
+      }
+    };
+
     if (route === "GET /v1/spaces") {
-      const rows = db.prepare("SELECT id, sealedKeys, createdAt FROM spaces WHERE account=?").all(account) as {
+      const rows = db.prepare("SELECT id, account, sealedKeys, createdAt FROM spaces").all() as {
         id: string;
+        account: string;
         sealedKeys: string;
         createdAt: string;
       }[];
       return sendJson(res, 200, {
         spaces: rows
-          .filter((r) => inScope(r.id))
+          .filter((r) => isMember(r) && inScope(r.id))
           .map((r) => ({ id: r.id, sealedKeys: JSON.parse(r.sealedKeys), createdAt: r.createdAt })),
       });
+    }
+
+    const transferMatch = url.pathname.match(/^\/v1\/spaces\/([^/]+)\/transfer$/);
+    if (req.method === "POST" && transferMatch) {
+      if (isAgent) return sendJson(res, 403, { error: "Agents cannot transfer spaces" });
+      const id = transferMatch[1];
+      const toAccount = String(parse(body).toAccount ?? "");
+      if (!/^[0-9a-f]{64}$/.test(toAccount)) return sendJson(res, 400, { error: "toAccount (hex account key) required" });
+      const sp = db.prepare("SELECT account FROM spaces WHERE id=?").get(id) as { account: string } | undefined;
+      if (!sp) return sendJson(res, 404, { error: `Unknown space ${id}` });
+      if (sp.account !== account) return sendJson(res, 403, { error: "Not your space" });
+      const target = db.prepare("SELECT COUNT(*) n FROM devices WHERE account=?").get(toAccount) as { n: number };
+      if (!target.n) return sendJson(res, 400, { error: "Target account has no registered devices" });
+      db.prepare("UPDATE spaces SET account=? WHERE id=?").run(toAccount, id);
+      db.prepare("UPDATE public_notes SET account=? WHERE account=?").run(toAccount, account);
+      const usage = (db.prepare("SELECT bytesUsed FROM accounts WHERE account=?").get(account) as { bytesUsed: number } | undefined)?.bytesUsed ?? 0;
+      if (usage) {
+        addUsage.run(toAccount, usage);
+        db.prepare("UPDATE accounts SET bytesUsed=0 WHERE account=?").run(account);
+      }
+      return sendJson(res, 200, { ok: true });
     }
 
     if (req.method === "PUT" && spaceMatch && !spaceMatch[2]) {
@@ -470,9 +506,11 @@ export async function startRelay(
 
     if (spaceMatch) {
       const spaceId = spaceMatch[1];
-      const owner = db.prepare("SELECT account FROM spaces WHERE id=?").get(spaceId) as { account: string } | undefined;
+      const owner = db.prepare("SELECT account, sealedKeys FROM spaces WHERE id=?").get(spaceId) as
+        | { account: string; sealedKeys: string }
+        | undefined;
       if (!owner) return sendJson(res, 404, { error: `Unknown space ${spaceId}` });
-      if (owner.account !== account) return sendJson(res, 403, { error: "Not your space" });
+      if (!isMember(owner)) return sendJson(res, 403, { error: "Not your space" });
       if (!inScope(spaceId)) return sendJson(res, 403, { error: "This agent is not granted that space" });
 
       if (req.method === "POST" && spaceMatch[2]) {
@@ -480,7 +518,8 @@ export async function startRelay(
         const b = parse(body);
         const blob = Buffer.from(String(b.blob ?? ""), "base64");
         if (!blob.length) return sendJson(res, 400, { error: "blob (base64) required" });
-        if (quota && usageOf(account) + blob.length > quota) {
+        // Quota is per space OWNER — members' pushes count against the owner.
+        if (quota && usageOf(owner.account) + blob.length > quota) {
           return sendJson(res, 413, {
             error: "Storage quota exceeded (" + Math.round(quota / 1e6) + "MB). Delete notes or upgrade.",
           });
@@ -488,7 +527,7 @@ export async function startRelay(
         const info = db
           .prepare("INSERT INTO updates (space, doc, author, blob, ts) VALUES (?, ?, ?, ?, ?)")
           .run(spaceId, spaceMatch[2], devicePub, blob, new Date().toISOString());
-        addUsage.run(account, blob.length);
+        addUsage.run(owner.account, blob.length);
         return sendJson(res, 200, { seq: Number(info.lastInsertRowid) });
       }
 
@@ -1020,6 +1059,17 @@ function appShell(_nonce: string): string {
     this browser; to see them again after you close this tab, keep your own copy now.</p>
     <div id="acctNote" class="tipsfoot" hidden>Your phrase isn't held in this session. You saved it when
     you signed up — open the app fresh and it will ask for it.</div>
+    <div class="acctlabel" style="margin-top:1rem">Change my 12 words</div>
+    <p class="tipsfoot">Lost track of your words, or worried they leaked? Generate a fresh phrase and
+    re-key this account. Your notes, devices, and agents keep working; the old words stop opening
+    anything.</p>
+    <button id="rotBtn" class="pairgo">${icon("key")} Generate new words</button>
+    <div id="rotFlow" hidden>
+      <div id="rotPhrase" class="phrasebox" style="margin-top:0.7rem"></div>
+      <label class="confirmrow"><input type="checkbox" id="rotSaved"> I wrote these 12 words down — they are now the ONLY phrase for this account</label>
+      <button id="rotGo" class="pairgo" disabled>${icon("check")} Re-key my account</button>
+      <div id="rotStatus" class="tipsfoot"></div>
+    </div>
   </div>
 </div>
 <div id="pairOverlay" hidden>

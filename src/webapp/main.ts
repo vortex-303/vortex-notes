@@ -1235,6 +1235,96 @@ $("#acctDownload").addEventListener("click", () => {
   a.click();
   URL.revokeObjectURL(a.href);
 });
+// ---------- account rotation: fresh 12 words, same notes ----------
+// The signed-in session holds the space key, so it can re-seal everything to a
+// brand-new account and hand ownership over. Old device/agent seals stay, so
+// every signed-in principal keeps working; only the OLD PHRASE dies.
+let rotPhrase = "";
+$("#rotBtn").addEventListener("click", () => {
+  rotPhrase = generatePhrase();
+  $("#rotPhrase").textContent = rotPhrase;
+  ($("#rotSaved") as HTMLInputElement).checked = false;
+  ($("#rotGo") as HTMLButtonElement).disabled = true;
+  $("#rotStatus").textContent = "";
+  $("#rotFlow").hidden = false;
+});
+$("#rotSaved").addEventListener("change", (e) => {
+  ($("#rotGo") as HTMLButtonElement).disabled = !(e.target as HTMLInputElement).checked;
+});
+$("#rotGo").addEventListener("click", () => {
+  void rotateAccount().catch((e) => ($("#rotStatus").textContent = "Failed: " + (e as Error).message + " — nothing was lost; you can retry."));
+});
+async function rotateAccount(): Promise<void> {
+  if (!client || !identity || !spaceKey || !spaceId || !rotPhrase) return;
+  const status = (t: string) => ($("#rotStatus").textContent = t);
+  status("Deriving your new keys…");
+  const newAccount = accountFromPhrase(rotPhrase);
+  const ndSign = randomSignKeypair();
+  const ndBox = randomBoxKeypair();
+  const device = certifyDevice(newAccount, ndSign, ndBox, browserDeviceName());
+  const newIdentity: PrincipalIdentity = {
+    file: { accountSignPub: toHex(newAccount.sign.pub), accountEncPub: toHex(newAccount.box.pub), device },
+    deviceSign: ndSign,
+    deviceBox: ndBox,
+  };
+  status("Registering this browser under the new account…");
+  const newClient = new RelayClient("", newIdentity);
+  await newClient.register();
+  status("Re-sealing your space…");
+  const sp = (await client.listSpaces()).find((s) => s.id === spaceId);
+  if (!sp) throw new Error("Space not found");
+  const sealedKeys = { ...sp.sealedKeys };
+  delete sealedKeys[identity.file.accountSignPub]; // the old phrase stops opening anything
+  sealedKeys[newIdentity.file.accountSignPub] = toHex(sealBox(spaceKey, newAccount.box.pub));
+  sealedKeys[device.signPub] = toHex(sealBox(spaceKey, ndBox.pub));
+  await client.createSpace({ id: sp.id, name: sp.id, createdAt: sp.createdAt, sealedKeys });
+  status("Transferring ownership…");
+  await client.transferSpace(spaceId, newIdentity.file.accountSignPub);
+  status("Switching this session over…");
+  localStorage.setItem(
+    "vn-device",
+    JSON.stringify({
+      account: newIdentity.file.accountSignPub,
+      accountEnc: newIdentity.file.accountEncPub,
+      signPriv: toHex(ndSign.priv),
+      boxPriv: toHex(ndBox.priv),
+      device,
+    })
+  );
+  identity = newIdentity;
+  client = newClient;
+  sessionPhrase = rotPhrase;
+  // Locked notes we can currently open: re-seal their body keys to the new
+  // account so the NEW words unlock them. Still-locked ones keep password-only.
+  let resealed = 0;
+  for (const [p, cached] of sessionKeys) {
+    const n = notes.get(p);
+    if (!n) continue;
+    const env = findEnvelope(splitFrontmatter(n.content).body);
+    if (!env || env.v !== 2) continue;
+    try {
+      const plain = openLockedBody(env, cached.key);
+      const meta: LockMeta = { ...env, sealedAcct: sealBox(cached.key, newAccount.box.pub) };
+      const fmEnd = frontmatterEnd(n.content);
+      const prefix = fmEnd > 0 ? n.content.slice(0, fmEnd) + "\n" : "";
+      await pushNote(p, prefix + wrapLockedBody(meta, cached.key, plain));
+      sessionKeys.set(p, { key: cached.key, meta });
+      resealed++;
+    } catch { /* leave that note as-is */ }
+  }
+  rotPhrase = "";
+  paintUserIdentity();
+  void probeAdmin();
+  $("#rotFlow").hidden = true;
+  status("");
+  alert(
+    "Done — your account now answers ONLY to the new 12 words.\n\n" +
+      "\u2022 Notes, devices, and agents: untouched, all working\n" +
+      (resealed ? "\u2022 " + resealed + " locked note(s) re-keyed to the new words\n" : "") +
+      "\u2022 The old words are dead — destroy any copies\n\n" +
+      "Keep the new words safe: they are now the only recovery."
+  );
+}
 $("#acctClose").addEventListener("click", () => (acctOverlay.hidden = true));
 acctOverlay.addEventListener("click", (e) => {
   if (e.target === acctOverlay) acctOverlay.hidden = true;

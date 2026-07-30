@@ -7,7 +7,7 @@ import { startRelay } from "../src/relay/server.js";
 import { RelayClient } from "../src/relay/client.js";
 import { initIdentity, loginIdentity, accountFromPhrase } from "../src/identity.js";
 import { createSpace, openSpaceKey, encryptDoc, decryptDoc } from "../src/spaces.js";
-import { openBox, fromHex, randomSignKeypair, sign, toHex, utf8 } from "../src/crypto.js";
+import { openBox, sealBox, fromHex, randomSignKeypair, sign, toHex, utf8 } from "../src/crypto.js";
 
 function freshHome(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "vortex-relay-"));
@@ -378,6 +378,55 @@ test("relay auth: unregistered devices, bad signatures, foreign spaces are rejec
       headers: { "x-vortex-device": mallory.file.device.signPub, "x-vortex-ts": old, "x-vortex-sig": "00" },
     });
     assert.equal(res2.status, 401);
+  } finally {
+    await relay.close();
+  }
+});
+
+test("space transfer: re-keys ownership, members keep access", async () => {
+  freshHome();
+  const { identity: alice } = initIdentity("alice-mac");
+  const relay = await startRelay({ port: 0 });
+  const base = `http://127.0.0.1:${relay.port}`;
+  try {
+    const cAlice = new RelayClient(base, alice);
+    await cAlice.register();
+    const space = createSpace(alice, "s");
+    await cAlice.createSpace(space);
+    const key = openSpaceKey(alice, space);
+    await cAlice.pushUpdate(space.id, "a.md", encryptDoc(key, "a.md", "hello"));
+
+    // a second account (the "new words" identity)
+    freshHome();
+    const { identity: nova } = initIdentity("nova-web");
+    const cNova = new RelayClient(base, nova);
+    await cNova.register();
+
+    // a stranger can't transfer someone else's space
+    await assert.rejects(cNova.transferSpace(space.id, nova.file.accountSignPub), /Not your space/);
+    // and the target must exist
+    await assert.rejects(cAlice.transferSpace(space.id, "ab".repeat(32)), /no registered devices/);
+
+    // re-seal to nova (account + device) minus alice's account, then transfer
+    const sp = (await cAlice.listSpaces()).find((s) => s.id === space.id)!;
+    const sealedKeys = { ...sp.sealedKeys };
+    delete sealedKeys[alice.file.accountSignPub];
+    sealedKeys[nova.file.accountSignPub] = toHex(sealBox(key, fromHex(nova.file.accountEncPub)));
+    sealedKeys[nova.file.device.signPub] = toHex(sealBox(key, nova.deviceBox.pub));
+    await cAlice.createSpace({ id: sp.id, name: sp.id, createdAt: sp.createdAt, sealedKeys });
+    await cAlice.transferSpace(space.id, nova.file.accountSignPub);
+
+    // nova owns it now: lists it, reads it, writes to it
+    const novaSpaces = await cNova.listSpaces();
+    assert.equal(novaSpaces.length, 1);
+    const pulled = await cNova.pullUpdates(space.id);
+    assert.ok(pulled.length >= 1);
+    await cNova.pushUpdate(space.id, "b.md", encryptDoc(key, "b.md", "from nova"));
+
+    // alice's DEVICE is still sealed in → still a member, still works
+    const aliceSpaces = await cAlice.listSpaces();
+    assert.equal(aliceSpaces.length, 1, "old device keeps membership via its seal");
+    await cAlice.pushUpdate(space.id, "c.md", encryptDoc(key, "c.md", "old device writes"));
   } finally {
     await relay.close();
   }
