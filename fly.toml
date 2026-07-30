@@ -9,7 +9,7 @@ primary_region = "gru"
   RELAY_DB = "/data/relay.db"
   RELAY_QUOTA_MB = "50"
   # comma-separated account pubkeys (web account first, old CLI account second)
-  RELAY_ADMIN_ACCOUNT = "65bcfb254f0ba4bea809f09e852e15f9ef41334e02767e495ade20cb06449580,58c9488278d525f23835beda6fd794d9bdbfc8d5cfb612f5377635ef4112f9a2"
+  RELAY_ADMIN_ACCOUNT = "a2048a64fa1dc547d5e693918a0b3552b694ce478436371d3493e0d7dcab50f5,65bcfb254f0ba4bea809f09e852e15f9ef41334e02767e495ade20cb06449580"
 
 [mounts]
   source = "vortex_relay_data"
