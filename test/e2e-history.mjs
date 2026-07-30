@@ -77,6 +77,19 @@ try {
   await page.click("#histBtn");
   await page.waitForSelector(".histrow");
   check("menu → History shows the locked version still in history", (await page.textContent("#histList")).includes("locked"));
+  await page.click("#histClose");
+
+  // download the note as .md — must be the readable content, right filename
+  await page.click("#moreBtn");
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.click("#dlMdBtn"),
+  ]);
+  check("download has a .md filename from the title", /Diary\.md$/.test(download.suggestedFilename()));
+  const dlPath = await download.path();
+  const dlContent = (await import("node:fs")).readFileSync(dlPath, "utf8");
+  check("downloaded file contains the note content", dlContent.includes("honey"));
+  check("downloaded file is NOT an encrypted envelope", !dlContent.includes("vortex-locked:"));
 
   check("no uncaught page errors", errors.length === 0);
   if (errors.length) console.log("  errors:", errors.slice(0, 3));

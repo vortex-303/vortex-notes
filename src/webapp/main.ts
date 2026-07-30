@@ -730,6 +730,36 @@ function openReader(path: string): void {
   $("#pane").scrollTop = 0;
 }
 
+/** Save a note to a local file — always the READABLE form, never the envelope. */
+function downloadNote(path: string, ext: "md" | "txt"): void {
+  const n = notes.get(path);
+  if (!n) return;
+  let content = n.content;
+  if (editor && current === path) {
+    // include what's in the editor right now, even if the autosave hasn't fired
+    content = editorFmPrefix + editor.state.doc.toString();
+  } else {
+    const env = findEnvelope(splitFrontmatter(n.content).body);
+    if (env) {
+      const cached = sessionKeys.get(path);
+      if (!cached) return alert("Unlock this note first to download its content.");
+      try {
+        const fmEnd = frontmatterEnd(n.content);
+        content = (fmEnd > 0 ? n.content.slice(0, fmEnd) + "\n\n" : "") + openLockedBody(env, cached.key);
+      } catch {
+        return alert("Couldn't decrypt this note for download.");
+      }
+    }
+  }
+  const name = (noteTitle(n) || path.split("/").pop() || "note").replace(/[\\/:*?"<>|]/g, "-");
+  const blob = new Blob([content], { type: ext === "md" ? "text/markdown" : "text/plain" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `${name}.${ext}`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
 function noteMenuHtml(locked: boolean, path?: string): string {
   const isPublic = path ? publicMap.has(path) : false;
   return (
@@ -737,6 +767,8 @@ function noteMenuHtml(locked: boolean, path?: string): string {
     `<button class="menuitem" id="renameBtn">${icon('edit')} Rename / move</button>` +
     `<button class="menuitem" id="dupBtn">${icon('copy')} Duplicate</button>` +
     `<button class="menuitem" id="histBtn">${icon('refresh')} History</button>` +
+    `<button class="menuitem" id="dlMdBtn">${icon('read')} Download .md</button>` +
+    `<button class="menuitem" id="dlTxtBtn">${icon('read')} Download .txt</button>` +
     (locked
       ? `<button class="menuitem" id="lockNowBtn">${icon('lock')} Lock now</button>` +
         `<button class="menuitem" id="unlockPermBtn">${icon('unlock')} Remove password</button>`
@@ -894,6 +926,8 @@ function wireCommonNoteButtons(path: string): void {
     });
     document.getElementById("pubBtn")?.addEventListener("click", () => openPublishModal(path));
     document.getElementById("histBtn")?.addEventListener("click", () => void openHistory(path).catch((e) => alert((e as Error).message)));
+    document.getElementById("dlMdBtn")?.addEventListener("click", () => downloadNote(path, "md"));
+    document.getElementById("dlTxtBtn")?.addEventListener("click", () => downloadNote(path, "txt"));
   }
   $("#delBtn").addEventListener("click", () => {
     if (!confirm(`Delete ${path} everywhere?`)) return;
