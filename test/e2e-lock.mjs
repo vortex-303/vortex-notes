@@ -85,6 +85,19 @@ try {
   const shellText = await page.textContent("#note");
   check("secret is NOT visible before unlocking", !shellText.includes(SECRET));
 
+  // NEW: unlock with the 12 words instead of the password (v2 envelope)
+  check("lock screen offers 12-word unlock", await page.isVisible("#phraseToggle"));
+  await page.click("#phraseToggle");
+  await page.fill("#unlockPhrase", phrase);
+  await page.click("#phraseGo");
+  await page.waitForSelector("#cm .cm-content", { timeout: 8000 });
+  check("12 words unlock the note (no password)", (await page.textContent("#cm .cm-content")).includes(SECRET));
+
+  // re-lock the session and continue with the password path
+  await page.click("#moreBtn");
+  await page.click("#lockNowBtn");
+  await page.waitForSelector("#unlockPw", { timeout: 8000 });
+
   // wrong password → error
   await page.fill("#unlockPw", "wrongpass");
   await page.click("#unlockGo");

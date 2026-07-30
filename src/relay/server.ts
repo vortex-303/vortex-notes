@@ -775,6 +775,11 @@ function appShell(_nonce: string): string {
   .lockscreen input { width:min(20rem,80vw); padding:0.6rem 0.9rem; border:1px solid var(--line);
     border-radius:8px; background:var(--surface); color:var(--ink); font:1rem var(--sans); outline:none; text-align:center; }
   .lockscreen input:focus { border-color:var(--accent); }
+  .lockscreen textarea { width:min(20rem,80vw); padding:0.6rem 0.9rem; border:1px solid var(--line);
+    border-radius:9px; background:var(--bg); color:var(--ink); font:0.85rem var(--mono); resize:none; }
+  .lockscreen textarea:focus { border-color:var(--accent); outline:none; }
+  #phraseRow { display:flex; flex-direction:column; align-items:center; gap:0.5rem; margin-top:0.5rem; }
+  #phraseRow[hidden] { display:none; }
   .lockerr { font:0.8rem var(--mono); color:var(--danger); min-height:1.2em; }
   .moremenu { position:relative; display:inline-flex; }
   .notemenu { position:absolute; top:calc(100% + 6px); right:0; z-index:20; min-width:12rem;

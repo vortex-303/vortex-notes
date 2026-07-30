@@ -48,3 +48,50 @@ test("frontmatter (title/tags) stays readable while body is encrypted", () => {
   assert.match(frontmatter ?? "", /title: My Diary/);
   assert.match(frontmatter ?? "", /private/);
 });
+
+// ---------- v2: account-phrase unlock ----------
+import { unlockContentWithAccount, wrapLockedBody, keyFromPassword, keyFromAccount, openLockedBody } from "../src/notelock.js";
+import { randomBoxKeypair } from "../src/crypto.js";
+
+test("v2 lock: password AND account keypair both unlock", () => {
+  const acct = randomBoxKeypair();
+  const locked = lockContent(NOTE, "hunter2", acct.pub);
+  assert.match(splitFrontmatter(locked).body, /vortex-locked:v2:/);
+  assert.ok(isLockedContent(locked));
+  assert.ok(!locked.includes("secret"));
+
+  const viaPw = unlockContent(locked, "hunter2");
+  assert.equal(viaPw!.body, "Line one of the secret.\nLine two.");
+  const viaAcct = unlockContentWithAccount(locked, acct);
+  assert.equal(viaAcct!.body, "Line one of the secret.\nLine two.");
+});
+
+test("v2 lock: wrong password and wrong account both fail", () => {
+  const acct = randomBoxKeypair();
+  const locked = lockContent(NOTE, "correct", acct.pub);
+  assert.equal(unlockContent(locked, "wrong"), null);
+  assert.equal(unlockContentWithAccount(locked, randomBoxKeypair()), null);
+});
+
+test("v1 lock: account unlock is impossible (password-only, by design)", () => {
+  const locked = lockContent(NOTE, "pw"); // no account pub → v1
+  assert.match(splitFrontmatter(locked).body, /vortex-locked:v1:/);
+  assert.equal(unlockContentWithAccount(locked, randomBoxKeypair()), null);
+});
+
+test("v2 re-lock (edit while unlocked) preserves the account recovery wrap", () => {
+  const acct = randomBoxKeypair();
+  const locked = lockContent(NOTE, "pw", acct.pub);
+  const env = findEnvelope(splitFrontmatter(locked).body)!;
+  const key = keyFromPassword(env, "pw")!;
+  // simulate the editor saving a new body with the session key
+  const rewrapped = wrapLockedBody(env, key, "edited body");
+  const env2 = findEnvelope(rewrapped)!;
+  // both the password and the account still open the EDITED body
+  const kAcct = keyFromAccount(env2, acct);
+  assert.ok(kAcct, "account wrap survived the re-lock");
+  assert.equal(openLockedBody(env2, kAcct!), "edited body");
+  const kPw = keyFromPassword(env2, "pw");
+  assert.ok(kPw, "password wrap survived the re-lock");
+  assert.equal(openLockedBody(env2, kPw!), "edited body");
+});

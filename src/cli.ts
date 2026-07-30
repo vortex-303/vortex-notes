@@ -3,7 +3,9 @@ import fs from "node:fs";
 import { Vault } from "./vault.js";
 import { Indexer } from "./indexer.js";
 import { search } from "./search.js";
-import { isLockedContent, lockContent, unlockContent } from "./notelock.js";
+import { isLockedContent, lockContent, unlockContent, unlockContentWithAccount } from "./notelock.js";
+import { accountFromPhrase } from "./account.js";
+import { fromHex } from "./crypto.js";
 import { startMcpServer } from "./mcp.js";
 import { startWebServer } from "./server.js";
 import { initIdentity, loginIdentity, loadIdentity, hasIdentity, vortexHome } from "./identity.js";
@@ -28,8 +30,9 @@ Usage:
   vortex-notes index [--vault <dir>]           (Re)build the search index
   vortex-notes search <query> [--vault <dir>] [--keyword]
                                                Search from the terminal
-  vortex-notes unlock <note.md> [--vault <dir>]
-                                               Read a password-protected note (prompts for password)
+  vortex-notes unlock <note.md> [--vault <dir>] [--phrase]
+                                               Read a password-protected note (password, or
+                                               --phrase to use your 12 words)
   vortex-notes lock <note.md> [--vault <dir>]  Password-protect a note in place
 
   vortex-notes identity init [--name <device>]  Create your identity (shows recovery phrase ONCE)
@@ -216,12 +219,19 @@ async function main(): Promise<void> {
         console.log(content); // not locked — just print it
         break;
       }
-      const pw = await promptHidden("Password: ");
-      const r = unlockContent(content, pw);
-      if (!r) fail("Wrong password.");
+      let r: { frontmatter: string | null; body: string } | null = null;
+      if (args.flags.has("phrase")) {
+        const phrase = await promptHidden("Your 12 words: ");
+        r = unlockContentWithAccount(content, accountFromPhrase(phrase).box);
+        if (!r) fail("This phrase can't open the note — locked before phrase-unlock existed (v1), or a different account.");
+      } else {
+        const pw = await promptHidden("Password (or rerun with --phrase to use your 12 words): ");
+        r = unlockContent(content, pw);
+        if (!r) fail("Wrong password.");
+      }
       const title = vault.readNote(rel).title;
       console.log(`\n# ${title}\n`);
-      console.log(r.body);
+      console.log(r!.body);
       break;
     }
     case "lock": {
@@ -232,10 +242,14 @@ async function main(): Promise<void> {
       if (!fs.existsSync(abs)) fail(`No such note: ${rel}`);
       const content = fs.readFileSync(abs, "utf8");
       if (isLockedContent(content)) fail("That note is already password-protected.");
-      const pw = await promptHidden("Set a password (lost = unrecoverable): ");
+      const pw = await promptHidden("Set a password (your 12 words also unlock it): ");
       if (!pw) fail("No password entered.");
       if ((await promptHidden("Confirm password: ")) !== pw) fail("Passwords didn't match.");
-      fs.writeFileSync(abs, lockContent(content, pw));
+      // Seal to the account too when this machine has an identity, so the
+      // 12-word phrase can always open the note (v2). No identity → v1.
+      let accountPub: Uint8Array | undefined;
+      try { accountPub = fromHex(loadIdentity().file.accountEncPub); } catch { /* local-only vault */ }
+      fs.writeFileSync(abs, lockContent(content, pw, accountPub));
       console.log(`Locked ${rel}. Its body is now encrypted; unlock with 'vortex-notes unlock ${rel}'.`);
       break;
     }

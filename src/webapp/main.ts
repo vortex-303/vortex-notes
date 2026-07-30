@@ -18,7 +18,6 @@ import {
   sealBox,
   toB64,
   fromB64,
-  deriveNoteKey,
   randomSignKeypair,
   randomBoxKeypair,
   signKeypairFromSeed,
@@ -33,7 +32,7 @@ import {
 } from "../crypto.js";
 import { RelayClient } from "../relay/client.js";
 import { slugify, splitFrontmatter, titleFromRaw } from "../textutil.js";
-import { findEnvelope, isLockedContent, wrapLockedBody, LOCK_AAD } from "../notelock.js";
+import { findEnvelope, isLockedContent, wrapLockedBody, keyFromPassword, keyFromAccount, openLockedBody, makeLock, type LockMeta, type LockEnvelope } from "../notelock.js";
 import { icon } from "../icons.js";
 
 interface DocPayload {
@@ -300,16 +299,16 @@ let editorFmPrefix = "";
 // content) so re-encrypting a locked note doesn't look like an edit.
 let lastSavedBody = "";
 // Password-lock context for the currently-open note (null = not locked).
-let lockedCtx: { key: Uint8Array; salt: Uint8Array } | null = null;
-// Session cache of note passwords: unlocked notes stay unlocked until reload/lock.
-const sessionKeys = new Map<string, { key: Uint8Array; salt: Uint8Array }>();
+let lockedCtx: { key: Uint8Array; meta: LockMeta } | null = null;
+// Session cache of note body keys: unlocked notes stay unlocked until reload/lock.
+const sessionKeys = new Map<string, { key: Uint8Array; meta: LockMeta }>();
 // path → publish record; loaded at unlock, kept fresh on publish/unpublish.
 const publicMap = new Map<string, { slug: string; author: string | null; theme: string }>();
 
 /** Full content to persist = stashed frontmatter + (re-encrypted) editor body. */
 function editorContent(): string {
   const bodyNow = editor ? editor.state.doc.toString() : "";
-  return editorFmPrefix + (lockedCtx ? wrapLockedBody(lockedCtx.salt, lockedCtx.key, bodyNow) : bodyNow);
+  return editorFmPrefix + (lockedCtx ? wrapLockedBody(lockedCtx.meta, lockedCtx.key, bodyNow) : bodyNow);
 }
 
 function setSaveState(text: string): void {
@@ -416,12 +415,12 @@ function openNote(path: string): void {
     if (!cached) return showLockScreen(path, n, env);
     let plain: string;
     try {
-      plain = new TextDecoder().decode(decryptPayload(cached.key, env.ct, LOCK_AAD));
+      plain = openLockedBody(env, cached.key);
     } catch {
       sessionKeys.delete(path);
       return showLockScreen(path, n, env);
     }
-    lockedCtx = { key: cached.key, salt: cached.salt };
+    lockedCtx = { key: cached.key, meta: env };
     // Frontmatter prefix ends with the closing '---\n'; a blank line then the body.
     editorFmPrefix = n.content.slice(0, frontmatterEnd(n.content)) + "\n";
     mountEditor(path, n, plain, true);
@@ -475,7 +474,7 @@ function mountEditor(path: string, n: DocPayload, body: string, locked: boolean)
 }
 
 /** Prompt for the note password; on success cache it and reopen unlocked. */
-function showLockScreen(path: string, n: DocPayload, env: { salt: Uint8Array; ct: Uint8Array }): void {
+function showLockScreen(path: string, n: DocPayload, env: LockEnvelope): void {
   lockedCtx = null;
   current = path;
   $("#note").innerHTML =
@@ -486,38 +485,83 @@ function showLockScreen(path: string, n: DocPayload, env: { salt: Uint8Array; ct
     `<input id="unlockPw" type="password" placeholder="Password" autocomplete="off">` +
     `<button id="unlockGo" class="mbtn primary">Unlock</button>` +
     `<div id="unlockErr" class="lockerr"></div>` +
+    (env.v === 2
+      ? `<button id="phraseToggle" class="lostpw">Unlock with your 12 words instead</button>` +
+        `<div id="phraseRow" hidden><textarea id="unlockPhrase" rows="2" placeholder="your 12 words" autocomplete="off"></textarea>` +
+        `<button id="phraseGo" class="mbtn primary">Unlock with phrase</button></div>`
+      : "") +
     `<button id="lostPwBtn" class="lostpw">Lost the password? Recover an earlier version</button></div>`;
+  const finish = (key: Uint8Array): void => {
+    sessionKeys.set(path, { key, meta: env });
+    openNote(path);
+  };
   const attempt = () => {
     const pw = ($("#unlockPw") as HTMLInputElement).value;
     if (!pw) return;
     $("#unlockErr").textContent = "Unlocking…";
     // scrypt is heavy; defer a tick so the label paints.
     window.setTimeout(() => {
-      try {
-        const key = deriveNoteKey(pw, env.salt);
-        decryptPayload(key, env.ct, LOCK_AAD); // throws if wrong password
-        sessionKeys.set(path, { key, salt: env.salt });
-        // Apple-Notes-style: reveal every other note that shares this password
-        // for the rest of the session (each has its own salt, so re-derive).
-        for (const [p, nn] of notes) {
-          if (p === path || sessionKeys.has(p)) continue;
-          const e2 = findEnvelope(splitFrontmatter(nn.content).body);
-          if (!e2) continue;
-          try {
-            const k2 = deriveNoteKey(pw, e2.salt);
-            decryptPayload(k2, e2.ct, LOCK_AAD);
-            sessionKeys.set(p, { key: k2, salt: e2.salt });
-          } catch {
-            /* different password — leave it locked */
-          }
-        }
-        openNote(path);
-      } catch {
+      const key = keyFromPassword(env, pw);
+      if (!key) {
         $("#unlockErr").textContent = "Wrong password.";
+        return;
       }
+      // Apple-Notes-style: reveal every other note that shares this password
+      // for the rest of the session (each has its own salt, so re-derive).
+      for (const [p, nn] of notes) {
+        if (p === path || sessionKeys.has(p)) continue;
+        const e2 = findEnvelope(splitFrontmatter(nn.content).body);
+        if (!e2) continue;
+        const k2 = keyFromPassword(e2, pw);
+        if (k2) sessionKeys.set(p, { key: k2, meta: e2 });
+      }
+      // Older v1 lock (password-only): now that we hold the password AND the
+      // plaintext, silently re-lock as v2 so the 12 words work from here on.
+      if (env.v === 1 && identity) {
+        try {
+          const plain = openLockedBody(env, key);
+          const { meta, key: nk } = makeLock(pw, fromHex(identity.file.accountEncPub));
+          const fmEnd = frontmatterEnd(n.content);
+          const prefix = fmEnd > 0 ? n.content.slice(0, fmEnd) + "\n" : "";
+          void pushNote(path, prefix + wrapLockedBody(meta, nk, plain))
+            .then(() => {
+              sessionKeys.set(path, { key: nk, meta });
+              openNote(path);
+            })
+            .catch(() => finish(key)); // offline: open with the v1 key, upgrade next time
+          return;
+        } catch { /* fall through to plain open */ }
+      }
+      finish(key);
     }, 20);
   };
   $("#unlockGo").addEventListener("click", attempt);
+  document.getElementById("phraseToggle")?.addEventListener("click", () => {
+    $("#phraseRow").hidden = false;
+    ($("#unlockPhrase") as HTMLTextAreaElement).focus();
+  });
+  document.getElementById("phraseGo")?.addEventListener("click", () => {
+    const words = ($("#unlockPhrase") as HTMLTextAreaElement).value.trim().toLowerCase().split(/\s+/).join(" ");
+    if (!words) return;
+    $("#unlockErr").textContent = "Unlocking…";
+    window.setTimeout(() => {
+      try {
+        const account = accountFromPhrase(words);
+        if (identity && toHex(account.sign.pub) !== identity.file.accountSignPub) {
+          $("#unlockErr").textContent = "Those words belong to a different account.";
+          return;
+        }
+        const key = keyFromAccount(env, account.box);
+        if (!key) {
+          $("#unlockErr").textContent = "This phrase can't open the note.";
+          return;
+        }
+        finish(key);
+      } catch {
+        $("#unlockErr").textContent = "That doesn't look like a valid 12-word phrase.";
+      }
+    }, 20);
+  });
   $("#lostPwBtn").addEventListener("click", () => void openHistory(path).catch((e) => alert((e as Error).message)));
   ($("#unlockPw") as HTMLInputElement).addEventListener("keydown", (e) => {
     if ((e as KeyboardEvent).key === "Enter") attempt();
@@ -646,7 +690,7 @@ function openReader(path: string): void {
     const cached = sessionKeys.get(path);
     if (!cached) return showLockScreen(path, n, env);
     try {
-      body = new TextDecoder().decode(decryptPayload(cached.key, env.ct, LOCK_AAD));
+      body = openLockedBody(env, cached.key);
     } catch {
       sessionKeys.delete(path);
       return showLockScreen(path, n, env);
@@ -737,15 +781,16 @@ async function lockNote(path: string): Promise<void> {
   if (!editor) return;
   const pw = await promptPassword({
     title: "Password-protect this note",
-    hint: "If you lose this password, the note is unrecoverable — there is no reset.",
+    hint: "Your 12-word phrase can also unlock it — and History keeps every earlier version.",
     confirm: true,
   });
   if (!pw) return;
-  const salt = randomKey(); // 32-byte scrypt salt
-  const key = deriveNoteKey(pw, salt);
+  // v2: random body key wrapped for the password AND sealed to the account,
+  // so the 12-word phrase can always open the note.
+  const { meta, key } = makeLock(pw, identity ? fromHex(identity.file.accountEncPub) : undefined);
   const plainBody = editor.state.doc.toString();
-  lockedCtx = { key, salt };
-  sessionKeys.set(path, { key, salt });
+  lockedCtx = { key, meta };
+  sessionKeys.set(path, { key, meta });
   lastSavedBody = plainBody; // body itself unchanged; only its stored form is now encrypted
   await pushNote(path, editorContent());
   lastSaved = notes.get(path)?.content ?? "";
