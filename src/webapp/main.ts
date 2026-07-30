@@ -546,14 +546,16 @@ function showLockScreen(path: string, n: DocPayload, env: LockEnvelope): void {
     $("#unlockErr").textContent = "Unlocking…";
     window.setTimeout(() => {
       try {
+        // Judge the words by whether they open THIS note — not by which
+        // session account they match (after a rotation, an old-identity
+        // device must still accept the new words).
         const account = accountFromPhrase(words);
-        if (identity && toHex(account.sign.pub) !== identity.file.accountSignPub) {
-          $("#unlockErr").textContent = "Those words belong to a different account.";
-          return;
-        }
         const key = keyFromAccount(env, account.box);
         if (!key) {
-          $("#unlockErr").textContent = "This phrase can't open the note.";
+          $("#unlockErr").textContent =
+            identity && toHex(account.sign.pub) !== identity.file.accountSignPub
+              ? "Those words belong to a different account, and they don't open this note."
+              : "This phrase can't open this note (it may have been locked before phrase-unlock existed).";
           return;
         }
         finish(key);
