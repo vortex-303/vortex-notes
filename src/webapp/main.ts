@@ -54,6 +54,7 @@ let spaceId: string | null = null;
 // Held in memory for THIS session only (never persisted) so the Account panel
 // can re-reveal the phrase after signup. Cleared on lock/reload.
 let sessionPhrase = "";
+let freshSpace = false;
 let cursor = 0;
 const notes = new Map<string, DocPayload>();
 let current: string | null = null;
@@ -125,6 +126,19 @@ function browserIdentity(phrase: string): PrincipalIdentity {
 }
 
 async function unlock(phrase: string, opts: { createSpaceIfEmpty?: boolean } = {}): Promise<void> {
+  // If this login fails (wrong words, empty account), restore whatever device
+  // blob was here before — a typo must never cost a working auto-unlock.
+  const prevBlob = localStorage.getItem("vn-device");
+  try {
+    await unlockInner(phrase, opts);
+  } catch (e) {
+    if (prevBlob) localStorage.setItem("vn-device", prevBlob);
+    else localStorage.removeItem("vn-device");
+    throw e;
+  }
+}
+
+async function unlockInner(phrase: string, opts: { createSpaceIfEmpty?: boolean } = {}): Promise<void> {
   const status = $("#status");
   status.textContent = "Deriving keys…";
   const account = accountFromPhrase(phrase);
@@ -140,6 +154,7 @@ async function unlock(phrase: string, opts: { createSpaceIfEmpty?: boolean } = {
     if (!opts.createSpaceIfEmpty) {
       throw new Error("No spaces for this account yet — create an account below, or run 'vortex-notes sync link' on a machine.");
     }
+    freshSpace = true; // brand-new signup: an empty vault is expected
     status.textContent = "Creating your encrypted space…";
     const key = randomKey();
     const record = {
@@ -282,7 +297,10 @@ function renderList(filter = ""): void {
       html += `<a href="#" data-path="${esc(n.path)}" class="${current === n.path ? "active" : ""}">${lock}${esc(noteTitle(n))}</a>`;
     }
   }
-  $("#list").innerHTML = html || '<div class="empty">Nothing here yet — create a note with the + button</div>';
+  const emptyMsg = sessionPhrase && !freshSpace
+    ? "This account has no notes. Expected yours? You signed in with a different set of 12 words — sign out (bottom-left) and use your main account's words."
+    : "Nothing here yet — create a note with the + button";
+  $("#list").innerHTML = html || `<div class="empty">${emptyMsg}</div>`;
 }
 
 function setMobileNoteOpen(open: boolean): void {
