@@ -19,6 +19,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import Database from "better-sqlite3";
+import { WebSocketServer, WebSocket } from "ws";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { verify, fromHex, toHex, utf8 } from "../crypto.js";
 import { verifyDeviceCert, verifyAgentChain, type DeviceCertPayload, type SignedCert } from "../account.js";
@@ -440,19 +441,10 @@ export async function startRelay(
       ? ([rawMatch[0], rawMatch[1], rawMatch[2] ? decodeURIComponent(rawMatch[2]) : undefined] as const)
       : null;
 
-    // Membership model: a principal can see/use a space if their account owns
-    // it OR their device/account key appears in sealedKeys — the seals ARE the
-    // ACL (you can only ever read what you can unseal). This keeps every
-    // signed-in device working across an account rotation.
-    const isMember = (row: { account: string; sealedKeys: string }): boolean => {
-      if (row.account === account) return true;
-      try {
-        const sk = JSON.parse(row.sealedKeys) as Record<string, string>;
-        return devicePub in sk || account in sk;
-      } catch {
-        return false;
-      }
-    };
+    // Membership: a principal can see/use a space if their account owns it OR
+    // their device/account key appears in sealedKeys — the seals ARE the ACL.
+    const isMember = (row: { account: string; sealedKeys: string }): boolean =>
+      spaceMemberOf(row, account, devicePub);
 
     if (route === "GET /v1/spaces") {
       const rows = db.prepare("SELECT id, account, sealedKeys, createdAt FROM spaces").all() as {
@@ -528,6 +520,9 @@ export async function startRelay(
           .prepare("INSERT INTO updates (space, doc, author, blob, ts) VALUES (?, ?, ?, ?, ?)")
           .run(spaceId, spaceMatch[2], devicePub, blob, new Date().toISOString());
         addUsage.run(owner.account, blob.length);
+        // Wake every OTHER live subscriber of this space — a poke, not the data;
+        // they pull the ciphertext over signed HTTP exactly as before.
+        broadcastChange(spaceId, Number(info.lastInsertRowid), devicePub);
         return sendJson(res, 200, { seq: Number(info.lastInsertRowid) });
       }
 
@@ -577,13 +572,112 @@ export async function startRelay(
     return { account: row.account, devicePub, cert };
   }
 
+  // ---- live sync: WebSocket wake-up channel on /ws ----
+  // The socket never carries ciphertext or keys — only "space X changed" pokes.
+  // A connection must prove membership (signed frame) before it is subscribed,
+  // and only ever hears about spaces it already can read.
+  function spaceMemberOf(row: { account: string; sealedKeys: string }, account: string, devicePub: string): boolean {
+    if (row.account === account) return true;
+    try {
+      const sk = JSON.parse(row.sealedKeys) as Record<string, string>;
+      return devicePub in sk || account in sk;
+    } catch {
+      return false;
+    }
+  }
+
+  const subs = new Map<string, Set<WebSocket>>(); // spaceId → live sockets
+  const subscribe = (spaceId: string, ws: WebSocket) => {
+    let set = subs.get(spaceId);
+    if (!set) subs.set(spaceId, (set = new Set()));
+    set.add(ws);
+  };
+  const unsubscribeAll = (ws: WebSocket) => {
+    for (const set of subs.values()) set.delete(ws);
+  };
+  function broadcastChange(spaceId: string, seq: number, exceptDevice: string): void {
+    const set = subs.get(spaceId);
+    if (!set) return;
+    const msg = JSON.stringify({ type: "changed", space: spaceId, seq });
+    for (const ws of set) {
+      if (ws.readyState === WebSocket.OPEN && (ws as WSMeta).vnDevice !== exceptDevice) ws.send(msg);
+    }
+  }
+
+  const wss = new WebSocketServer({ server, path: "/ws" });
+  wss.on("connection", (ws: WebSocket) => {
+    const meta = ws as WSMeta;
+    meta.vnAlive = true;
+    ws.on("pong", () => (meta.vnAlive = true));
+    ws.on("message", (raw: Buffer) => {
+      let frame: { type?: string; device?: string; ts?: string; sig?: string; spaces?: string[] };
+      try {
+        frame = JSON.parse(raw.toString());
+      } catch {
+        return;
+      }
+      if (frame.type !== "sub") return;
+      const { device = "", ts = "", sig = "", spaces = [] } = frame;
+      // Signature over the requested space set proves this device asked for it.
+      if (!device || !ts || Math.abs(Date.now() - Number(ts)) > MAX_SKEW_MS) {
+        return ws.send(JSON.stringify({ type: "error", error: "bad-auth" }));
+      }
+      const canonical = `WS-SUB\n${ts}\n${toHex(sha256(utf8([...spaces].sort().join(","))))}`;
+      let sigOk = false;
+      try {
+        sigOk = verify(fromHex(sig), utf8(canonical), fromHex(device));
+      } catch {
+        sigOk = false;
+      }
+      if (!sigOk) return ws.send(JSON.stringify({ type: "error", error: "bad-sig" }));
+      const dev = db.prepare("SELECT account FROM devices WHERE signPub=?").get(device) as { account: string } | undefined;
+      if (!dev) return ws.send(JSON.stringify({ type: "error", error: "unknown-device" }));
+      meta.vnDevice = device;
+      unsubscribeAll(ws);
+      const granted: string[] = [];
+      for (const spaceId of spaces) {
+        const row = db.prepare("SELECT account, sealedKeys FROM spaces WHERE id=?").get(spaceId) as
+          | { account: string; sealedKeys: string }
+          | undefined;
+        if (row && spaceMemberOf(row, dev.account, device)) {
+          subscribe(spaceId, ws);
+          granted.push(spaceId);
+        }
+      }
+      ws.send(JSON.stringify({ type: "subscribed", spaces: granted }));
+    });
+    ws.on("close", () => unsubscribeAll(ws));
+    ws.on("error", () => unsubscribeAll(ws));
+  });
+  // Drop half-open sockets so subs stay clean.
+  const heartbeat = setInterval(() => {
+    for (const ws of wss.clients) {
+      const meta = ws as WSMeta;
+      if (meta.vnAlive === false) {
+        ws.terminate();
+        continue;
+      }
+      meta.vnAlive = false;
+      ws.ping();
+    }
+  }, 30_000);
+  (heartbeat as unknown as { unref?: () => void }).unref?.();
+
   await new Promise<void>((resolve) => server.listen(opts.port, resolve));
   const port = (server.address() as { port: number }).port;
   const close = async () => {
+    clearInterval(heartbeat);
+    for (const ws of wss.clients) ws.terminate();
+    await new Promise<void>((resolve) => wss.close(() => resolve()));
     await new Promise<void>((resolve) => server.close(() => resolve()));
     db.close();
   };
   return { server, port, close };
+}
+
+interface WSMeta extends WebSocket {
+  vnAlive?: boolean;
+  vnDevice?: string;
 }
 
 function parse(body: Buffer): Record<string, unknown> {

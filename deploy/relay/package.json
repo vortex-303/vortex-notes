@@ -8,6 +8,7 @@
     "@noble/hashes": "^2.2.0",
     "@scure/bip39": "^2.2.0",
     "better-sqlite3": "^11.8.0",
-    "marked": "^15.0.0"
+    "marked": "^15.0.0",
+    "ws": "^8.18.0"
   }
 }

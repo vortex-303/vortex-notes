@@ -152,6 +152,14 @@ export class RelayClient {
     return data.updates.map((u) => ({ ...u, blob: fromB64(u.blob) }));
   }
 
+  /** A signed subscribe frame for the live-sync WebSocket (proves membership). */
+  wsSubFrame(spaces: string[]): { type: "sub"; device: string; ts: string; sig: string; spaces: string[] } {
+    const ts = String(Date.now());
+    const canonical = `WS-SUB\n${ts}\n${toHex(sha256(utf8([...spaces].sort().join(","))))}`;
+    const sig = toHex(sign(utf8(canonical), this.identity.deviceSign.priv));
+    return { type: "sub", device: this.identity.file.device.signPub, ts, sig, spaces };
+  }
+
   private async signed(method: string, pathWithQuery: string, body?: unknown): Promise<Response> {
     const raw = body === undefined ? new Uint8Array(0) : utf8(JSON.stringify(body));
     const ts = String(Date.now());

@@ -199,7 +199,66 @@ async function enterApp(): Promise<void> {
   $("#main").style.display = "flex";
   paintUserIdentity();
   void probeAdmin();
-  pollTimer = window.setInterval(() => void refresh().catch(() => undefined), 30_000);
+  startLiveSync();
+  // Poll stays as a safety net (proxies/sleep can drop the socket) — slow now
+  // that the WebSocket carries instant updates.
+  pollTimer = window.setInterval(() => void refresh().catch(() => undefined), 60_000);
+}
+
+// ---------- live sync: instant updates over WebSocket ----------
+let liveSocket: WebSocket | null = null;
+let liveClosed = false;
+let liveRetry = 0;
+let liveRefreshTimer: number | undefined;
+
+function startLiveSync(): void {
+  liveClosed = false;
+  openLiveSocket();
+}
+function stopLiveSync(): void {
+  liveClosed = true;
+  if (liveSocket) {
+    try { liveSocket.close(); } catch { /* ignore */ }
+  }
+  liveSocket = null;
+}
+function openLiveSocket(): void {
+  if (liveClosed || !client || !spaceId) return;
+  const url = (location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws";
+  let ws: WebSocket;
+  try {
+    ws = new WebSocket(url);
+  } catch {
+    scheduleLiveReconnect();
+    return;
+  }
+  liveSocket = ws;
+  ws.onopen = () => {
+    liveRetry = 0;
+    if (client && spaceId) ws.send(JSON.stringify(client.wsSubFrame([spaceId])));
+  };
+  ws.onmessage = (ev) => {
+    let m: { type?: string };
+    try { m = JSON.parse(String(ev.data)); } catch { return; }
+    if (m.type === "changed") {
+      // Coalesce bursts (a multi-file sync) into one refresh.
+      window.clearTimeout(liveRefreshTimer);
+      liveRefreshTimer = window.setTimeout(() => void refresh().catch(() => undefined), 150);
+    }
+  };
+  ws.onclose = () => {
+    if (liveSocket === ws) liveSocket = null;
+    scheduleLiveReconnect();
+  };
+  ws.onerror = () => {
+    try { ws.close(); } catch { /* onclose handles retry */ }
+  };
+}
+function scheduleLiveReconnect(): void {
+  if (liveClosed) return;
+  const delay = Math.min(30_000, 1000 * 2 ** liveRetry) + Math.floor(Math.random() * 500);
+  liveRetry++;
+  window.setTimeout(openLiveSocket, delay);
 }
 
 /**
@@ -1372,6 +1431,9 @@ async function rotateAccount(): Promise<void> {
   identity = newIdentity;
   client = newClient;
   sessionPhrase = rotPhrase;
+  // Re-open live sync under the new device identity.
+  stopLiveSync();
+  startLiveSync();
   // Locked notes we can currently open: re-seal their body keys to the new
   // account so the NEW words unlock them. Still-locked ones keep password-only.
   let resealed = 0;
@@ -1524,6 +1586,7 @@ $("#lockBtn").addEventListener("click", () => {
   sessionKeys.clear();
   localStorage.removeItem("vn-device"); // forget the device key → next visit asks for the phrase
   clearInterval(pollTimer);
+  stopLiveSync();
   location.reload();
 });
 

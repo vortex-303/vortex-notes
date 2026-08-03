@@ -431,3 +431,76 @@ test("space transfer: re-keys ownership, members keep access", async () => {
     await relay.close();
   }
 });
+
+test("live sync: signed subscribers get 'changed' pokes; non-members are refused", async () => {
+  const { WebSocket } = await import("ws");
+  freshHome();
+  const { phrase, identity: owner } = initIdentity("phone");
+  const relay = await startRelay({ port: 0 });
+  const base = `http://127.0.0.1:${relay.port}`;
+  const wsUrl = `ws://127.0.0.1:${relay.port}/ws`;
+  try {
+    const cOwner = new RelayClient(base, owner);
+    await cOwner.register();
+    const space = createSpace(owner, "s");
+    await cOwner.createSpace(space);
+    const key = openSpaceKey(owner, space);
+
+    // a SECOND device on the same account — this is what pushes
+    freshHome();
+    const laptop = loginIdentity(phrase, "laptop");
+    const cLaptop = new RelayClient(base, laptop);
+    await cLaptop.register();
+
+    // an unrelated account (non-member)
+    freshHome();
+    const { identity: stranger } = initIdentity("stranger");
+    const cStranger = new RelayClient(base, stranger);
+    await cStranger.register();
+
+    const connect = (client: RelayClient): Promise<{ ws: import("ws").WebSocket; msgs: Record<string, unknown>[] }> =>
+      new Promise((resolve) => {
+        const ws = new WebSocket(wsUrl);
+        const msgs: Record<string, unknown>[] = [];
+        ws.on("message", (d: Buffer) => msgs.push(JSON.parse(d.toString())));
+        ws.on("open", () => { ws.send(JSON.stringify(client.wsSubFrame([space.id]))); resolve({ ws, msgs }); });
+      });
+
+    const member = await connect(cOwner);
+    const outsider = await connect(cStranger);
+    await new Promise((r) => setTimeout(r, 150)); // let subscribe frames resolve
+
+    // membership decisions
+    assert.deepEqual(member.msgs.find((m) => m.type === "subscribed")?.spaces, [space.id]);
+    assert.deepEqual(outsider.msgs.find((m) => m.type === "subscribed")?.spaces, [], "stranger granted nothing");
+
+    // a push wakes the member with a content-free poke
+    await cLaptop.pushUpdate(space.id, "a.md", encryptDoc(key, "a.md", "hello"));
+    await new Promise((r) => setTimeout(r, 200));
+    const poke = member.msgs.find((m) => m.type === "changed");
+    assert.ok(poke, "member received a change poke");
+    assert.equal(poke.space, space.id);
+    assert.ok(typeof poke.seq === "number");
+    assert.ok(!JSON.stringify(poke).includes("hello"), "poke carries no plaintext");
+    assert.ok(!outsider.msgs.some((m) => m.type === "changed"), "stranger heard nothing");
+
+    // a bad signature is rejected
+    const bad = await new Promise<Record<string, unknown>[]>((resolve) => {
+      const ws = new WebSocket(wsUrl);
+      const msgs: Record<string, unknown>[] = [];
+      ws.on("message", (d: Buffer) => msgs.push(JSON.parse(d.toString())));
+      ws.on("open", () => {
+        const f = cOwner.wsSubFrame([space.id]);
+        f.sig = "00".repeat(64);
+        ws.send(JSON.stringify(f));
+        setTimeout(() => resolve(msgs), 150);
+      });
+    });
+    assert.ok(bad.some((m) => m.type === "error"), "forged signature rejected");
+
+    member.ws.close();
+    outsider.ws.close();
+  } finally {
+    await relay.close();
+  }
+});
