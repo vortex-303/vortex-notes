@@ -1683,6 +1683,13 @@ $("#themeBtn").addEventListener("click", () => {
   localStorage.setItem("vn-theme", next);
 });
 
+// --- PWA: register the offline service worker (harmless if unsupported) ---
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(() => { /* offline install is best-effort */ });
+  });
+}
+
 // --- startup: stay signed in. Try the stored device key before asking for the phrase. ---
 const lockEl = $("#lock");
 if (localStorage.getItem("vn-device")) {

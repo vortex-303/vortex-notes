@@ -31,6 +31,43 @@ import { marked } from "marked";
 const MAX_BODY = 8 * 1024 * 1024;
 const MAX_SKEW_MS = 5 * 60 * 1000;
 
+// PWA service worker: makes the app launch offline. It caches ONLY the static
+// shell (HTML/JS/manifest/icons) — never /v1/* API traffic, so no ciphertext or
+// signed responses are ever stored. Network-first for the shell so updates land
+// the moment you're online; cache is the offline fallback.
+const SW_CACHE = "vortex-notes-v2";
+const SERVICE_WORKER = `
+const CACHE = ${JSON.stringify(SW_CACHE)};
+const SHELL = ["/app", "/app/bundle.js", "/app/manifest.webmanifest",
+  "/app/icon-192.png", "/app/icon-512.png", "/app/icon-180.png", "/app/icon-maskable-512.png"];
+self.addEventListener("install", (e) => {
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+});
+self.addEventListener("activate", (e) => {
+  e.waitUntil(caches.keys()
+    .then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+    .then(() => self.clients.claim()));
+});
+self.addEventListener("fetch", (e) => {
+  const url = new URL(e.request.url);
+  if (e.request.method !== "GET") return;                 // never touch writes
+  if (url.origin !== self.location.origin) return;        // relay same-origin only
+  if (url.pathname.startsWith("/v1/")) return;            // API: always live, never cached
+  const isShell = url.pathname === "/app" || url.pathname === "/app/bundle.js" || url.pathname === "/app/manifest.webmanifest";
+  if (isShell) {
+    e.respondWith(fetch(e.request).then((r) => {
+      const copy = r.clone();
+      caches.open(CACHE).then((c) => c.put(e.request, copy));
+      return r;
+    }).catch(() => caches.match(e.request)));
+    return;
+  }
+  if (url.pathname.startsWith("/app/icon")) {
+    e.respondWith(caches.match(e.request).then((r) => r || fetch(e.request)));
+  }
+});
+`.trim();
+
 export interface RelayOptions {
   port: number;
   dbPath?: string; // default in-memory
@@ -153,7 +190,7 @@ export async function startRelay(
       const nonce = crypto.randomBytes(16).toString("base64");
       res.writeHead(200, {
         "Content-Type": "text/html; charset=utf-8",
-        "Content-Security-Policy": `default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'`,
+        "Content-Security-Policy": `default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; manifest-src 'self'`,
         "Cache-Control": "no-cache",
       });
       return void res.end(appShell(nonce));
@@ -170,17 +207,41 @@ export async function startRelay(
       return void res.end(JSON.stringify({
         name: "Vortex Notes",
         short_name: "Vortex",
+        description: "End-to-end encrypted notes — shared memory for you and your AI agents.",
         start_url: "/app",
+        scope: "/app",
         display: "standalone",
+        orientation: "portrait-primary",
         background_color: "#121715",
         theme_color: "#14735C",
-        icons: [{
-          src: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%23121715'/%3E%3Cg stroke='%234CC2A0' stroke-width='2' stroke-linecap='round' fill='none'%3E%3Cpath d='M12 3.5 A8.5 8.5 0 0 1 20.5 12'/%3E%3Cpath d='M12 3.5 A8.5 8.5 0 0 1 20.5 12' transform='rotate(120 12 12)'/%3E%3Cpath d='M12 3.5 A8.5 8.5 0 0 1 20.5 12' transform='rotate(240 12 12)'/%3E%3C/g%3E%3Ccircle cx='12' cy='12' r='1.8' fill='%234CC2A0'/%3E%3C/svg%3E",
-          sizes: "any",
-          type: "image/svg+xml",
-          purpose: "any",
-        }],
+        categories: ["productivity", "utilities"],
+        icons: [
+          { src: "/app/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+          { src: "/app/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+          { src: "/app/icon-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+        ],
       }));
+    }
+    const iconMatch = url.pathname.match(/^\/app\/(icon-(?:192|512|180|maskable-512)\.png)$/);
+    if (req.method === "GET" && iconMatch) {
+      const here = path.dirname(fileURLToPath(import.meta.url));
+      const f = [
+        path.join(here, "../assets/icons", iconMatch[1]),
+        path.join(here, "../../assets/icons", iconMatch[1]),
+        path.join(process.cwd(), "assets/icons", iconMatch[1]),
+      ].find((p) => fs.existsSync(p));
+      if (!f) return sendJson(res, 404, { error: "icon not built" });
+      res.writeHead(200, { "Content-Type": "image/png", "Cache-Control": "public, max-age=604800" });
+      return void res.end(fs.readFileSync(f));
+    }
+    if (route === "GET /sw.js") {
+      // Root scope so the service worker also controls the /app entry itself.
+      res.writeHead(200, {
+        "Content-Type": "text/javascript; charset=utf-8",
+        "Service-Worker-Allowed": "/",
+        "Cache-Control": "no-cache",
+      });
+      return void res.end(SERVICE_WORKER);
     }
     if (route === "GET /app/bundle.js") {
       const here = path.dirname(fileURLToPath(import.meta.url));
@@ -704,6 +765,8 @@ function appShell(_nonce: string): string {
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Vortex Notes">
+<link rel="apple-touch-icon" href="/app/icon-180.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/app/icon-192.png">
 <link rel="manifest" href="/app/manifest.webmanifest">
 <link rel="icon" href="data:image/svg+xml,%3Csvg viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cg stroke='%2314735C' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M12 2.75 A9.25 9.25 0 0 1 21.25 12'/%3E%3Cpath d='M12 2.75 A9.25 9.25 0 0 1 21.25 12' transform='rotate(120 12 12)'/%3E%3Cpath d='M12 2.75 A9.25 9.25 0 0 1 21.25 12' transform='rotate(240 12 12)'/%3E%3C/g%3E%3Ccircle cx='12' cy='12' r='2.2' fill='%2314735C'/%3E%3C/svg%3E">
 <title>Vortex Notes</title>
