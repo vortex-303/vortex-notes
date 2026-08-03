@@ -8,7 +8,9 @@ import { startRelay } from "../dist/relay/server.js";
 const relay = await startRelay({ port: 0 });
 const base = `http://127.0.0.1:${relay.port}`;
 const browser = await chromium.launch();
-const page = await (await browser.newContext()).newPage();
+const context = await browser.newContext();
+await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+const page = await context.newPage();
 const errors = [];
 page.on("pageerror", (e) => errors.push(String(e)));
 page.on("dialog", async (d) => {
@@ -90,6 +92,15 @@ try {
   const dlContent = (await import("node:fs")).readFileSync(dlPath, "utf8");
   check("downloaded file contains the note content", dlContent.includes("honey"));
   check("downloaded file is NOT an encrypted envelope", !dlContent.includes("vortex-locked:"));
+
+  // copy content to clipboard — readable text, not the envelope
+  // (the menu is still open from the download above)
+  if (!(await page.isVisible("#copyBtn"))) await page.click("#moreBtn");
+  await page.click("#copyBtn");
+  await page.waitForTimeout(300);
+  const clip = await page.evaluate(() => navigator.clipboard.readText());
+  check("clipboard has the note content", clip.includes("honey"));
+  check("clipboard is NOT an encrypted envelope", !clip.includes("vortex-locked:"));
 
   check("no uncaught page errors", errors.length === 0);
   if (errors.length) console.log("  errors:", errors.slice(0, 3));
