@@ -1,117 +1,143 @@
 # Vortex Notes
 
-**Your notes. Your agents' memory. One encrypted place.**
-
-<p align="center"><img src="assets/demo.svg" alt="Vortex Notes: install, cross-lingual search, pair an agent" width="740"></p>
+**End-to-end-encrypted notes that double as memory for your AI agents.**
 
 <p align="center">
-  <a href="https://vortex-relay.fly.dev/app"><b>Open the app</b></a> ·
+  <a href="https://vortex-relay.fly.dev/app"><b>▶ Open the app</b></a> ·
+  <a href="https://vortex-relay.fly.dev">Live demo</a> ·
   <a href="https://www.npmjs.com/package/vortex-notes">npm</a> ·
-  <a href="https://vortex-relay.fly.dev">vortex-relay.fly.dev</a>
+  <a href="#self-host-the-relay">Self-host</a>
 </p>
 
-Plain-markdown notes with a first-party MCP server and zero-config local semantic
-search, end-to-end encrypted sync, and scoped agent access — the vault your agents
-can actually use.
+<p align="center"><img src="docs/media/app-desktop.png" alt="Vortex Notes web app: a live-preview markdown editor with an encrypted vault" width="880"></p>
 
-Your notes are plain `.md` files in a folder — open them in any editor, grep them,
-git them, point Obsidian at them. What Vortex Notes adds:
+Your notes are plain `.md` files you own — greppable, git-able, Obsidian-compatible.
+Vortex Notes adds the two things a notes app and an agent-memory store each do
+separately, in one place:
 
-- **First-party MCP server** — Claude Code, OpenClaw, Cursor, or any MCP client can
-  search, read, and write your notes through task-shaped tools (`search_notes`,
-  `read_note`, `write_note`, `edit_note`, `append_daily`, `recent_activity`,
-  `build_context`, `remember`), not a CRUD API mirror. Works headless: no app
-  needs to be open.
-- **Facts with a lifecycle** — `remember(fact, supersedes)` records dated facts in
-  `memory/*.md`; superseded facts stay visible with strikethrough and a pointer to
-  what replaced them. Your agent's beliefs are auditable markdown, not a black box.
-- **One-call context** — `build_context(topic)` returns the top notes in full plus
-  one hop of `[[wikilinks]]` (including backlinks), so agents start a task with
-  the right context instead of five search round-trips.
-- **Local hybrid semantic search** — BM25 + multilingual embeddings (SQLite FTS5 +
-  sqlite-vec + a small on-device model). No API key, no cloud, nothing leaves your
-  machine. Works in English, Spanish, and ~100 other languages.
-- **Daily notes as agent memory** — agents append timestamped entries to
-  `daily/YYYY-MM-DD.md`; you read them like a journal.
-- **Read-only mode** — connect an agent with `--read-only` and it can search and
-  read but never write.
-- **Local web viewer** — `vortex-notes serve` opens your vault at
-  `http://127.0.0.1:7303`: crisp typographic rendering, dark/light themes,
-  clickable `[[wikilinks]]`, hybrid search, a source-view toggle, and live
-  reload when you or an agent edits a note.
+- **The server can't read anything.** A 12-word phrase is your whole account; keys
+  are derived in your browser. The relay stores ciphertext only — no plaintext
+  field exists in its schema, and there's no password to reset because there's
+  nothing on the server to reset.
+- **Agents are principals, not passengers.** An agent gets its *own* key — born on
+  its machine, never transmitted, certified by yours, scoped to the spaces you
+  grant, and revocable in one command. Every edit it makes is signed as the agent.
 
-No accounts required. No plugins. MIT. And when you want your notes on every
-device: **end-to-end encrypted sync** — a 12-word recovery phrase is your whole
-identity, the relay stores only ciphertext (self-host it with one command, or
-use a hosted one), and a mobile-friendly web app with Obsidian-style live-preview
-editing decrypts everything client-side.
+That combination — *agents can fully use it* **and** *the server can't read it* —
+is the empty quadrant this fills.
 
-## Install
+---
+
+## The app
+
+A real app, not a viewer: **installable** on iPhone / Android / Mac (works
+offline), **sub-second cross-device sync** over WebSocket, and an Obsidian-style
+**live-preview** markdown editor that's as good on a phone as on a desktop.
+
+<p align="center">
+  <img src="docs/media/app-mobile.png" alt="Vortex Notes on a phone" width="260">
+  &nbsp;&nbsp;
+  <img src="docs/media/app-agents.png" alt="Agents and devices: each has its own scoped, revocable key" width="560">
+</p>
+
+- **Password-locked notes** — lock a note with a password *or* your 12 words; the
+  title stays visible, the body is a sealed second layer even your own devices
+  can't read until unlocked.
+- **Version history & recovery** — every synced version is kept; restore an earlier
+  one, or recover a note whose password you lost from before it was locked.
+- **Public notes** — publish any note to a themed public page in one tap.
+- **Change your 12 words** — rotate your recovery phrase without losing a thing;
+  every signed-in device and agent keeps working, the old phrase goes dead.
+
+## Agent memory (MCP)
+
+A first-party MCP server gives Claude Code, OpenClaw, Cursor, or any MCP client
+task-shaped tools — not a CRUD mirror — and it works headless:
+
+- `search_notes` · `read_note` · `write_note` · `edit_note` (surgical)
+- `append_daily` — timestamped journal entries
+- `remember(fact, supersedes)` — facts with a lifecycle: a superseded fact stays
+  visible, struck through, pointing at what replaced it. Auditable, not a black box.
+- `build_context(topic)` — the top notes in full plus one hop of `[[wikilinks]]`,
+  so an agent starts a task with the right context in one call.
+
+**Search is on-device.** Hybrid BM25 + multilingual embeddings (SQLite FTS5 +
+sqlite-vec + a small local model). No API key, nothing leaves your machine, and an
+English query finds your Spanish notes across ~100 languages.
+
+---
+
+## Quick start
+
+### Try the app
+
+Open **[vortex-relay.fly.dev/app](https://vortex-relay.fly.dev/app)**, create an
+account (save the 12 words), and start writing. Add it to your home screen to
+install it. That's the whole onboarding — no email, no password.
+
+### Connect an agent
+
+On the agent's machine:
 
 ```sh
-npm install -g vortex-notes
-vortex-notes init                      # creates ~/VortexNotes
+npx vortex-notes pair
 ```
 
-## Connect an agent
-
-Claude Code:
+It prints a 6-letter code; approve it in the app from your phone. The agent now
+has its own scoped, revocable key — it never sees your recovery phrase. Or wire
+the MCP server directly:
 
 ```sh
+# Claude Code
 claude mcp add vortex-notes -- vortex-notes mcp --vault ~/VortexNotes
 ```
 
-Any other MCP client (stdio):
+Any stdio MCP client: `{ "command": "vortex-notes", "args": ["mcp", "--vault", "/path/to/vault"] }`.
+Add `--read-only` to make it read-only.
 
-```json
-{
-  "command": "vortex-notes",
-  "args": ["mcp", "--vault", "/path/to/vault"]
-}
-```
-
-Add `--read-only` to make the vault read-only for that client.
-
-## Use it yourself
+### Use the CLI
 
 ```sh
-vortex-notes serve                              # web viewer at 127.0.0.1:7303
-vortex-notes search "that idea about pricing"   # hybrid semantic + keyword
-vortex-notes index                              # rebuild the index manually
+npm install -g vortex-notes
+vortex-notes init                              # create a vault
+vortex-notes search "that idea about pricing"  # hybrid semantic + keyword
+vortex-notes serve                             # local web viewer at 127.0.0.1:7303
 ```
 
-The index lives in `.vortex/index.db` inside the vault and is disposable — the
-markdown files are always the source of truth. Set `VORTEX_NOTES_NO_SEMANTIC=1`
-to skip embeddings entirely (keyword search only, no model download).
+The index in `.vortex/index.db` is disposable — the markdown files are always the
+source of truth. `VORTEX_NOTES_NO_SEMANTIC=1` skips embeddings (keyword only, no
+model download).
 
-## Why
+### Self-host the relay
 
-Agent memory converged on folders of markdown. Notes apps converged on bolted-on,
-app-must-be-running integrations. Vortex Notes starts from the middle: one vault
-that is both your notes and your agents' memory, with search that actually works
-and files you can walk away with at any moment.
-
-## Sync (optional, E2EE)
+The hosted relay at `vortex-relay.fly.dev` is convenience, not lock-in. Run your own:
 
 ```sh
-vortex-notes identity init                     # your 12 words — shown once
-vortex-notes relay --port 7300 --db relay.db   # self-host the ciphertext store…
+vortex-notes identity init                       # your 12 words — shown once
+vortex-notes relay --port 7300 --db relay.db     # the ciphertext store + web app
 vortex-notes sync link --relay <url> --space personal
-vortex-notes sync                              # …and on another machine:
-vortex-notes identity login && vortex-notes sync join --relay <url>
+vortex-notes sync                                # and on another machine: sync join
 ```
 
-The relay never sees plaintext — not note content, not names, not keys. The
-web app it serves at `/app` does all crypto in the browser: create an account,
-type your phrase, read and edit anywhere (live-preview markdown, installable
-as a PWA). Deletions propagate; concurrent edits 3-way-merge; conflicts never
-lose words.
+## How the encryption works
 
-## Roadmap
+A 12-word BIP39 phrase derives your account's signing + encryption keys. Each
+device and agent has its own random keypair, certified by your account key — an
+`account → device → agent` chain. A space's content key is sealed to each
+principal that may read it; the relay enforces scope and read-only on every signed
+request but only ever holds sealed blobs.
 
-- Agents as first-class principals: share a space with an agent like you'd
-  share it with a person (scoped, revocable), signed per-line attribution,
-  per-agent undo, and a "what your agents learned this week" review inbox
-- Instant push sync (WebSocket) and real-time collaboration
+What a malicious or subpoenaed relay can do: serve stale or withheld ciphertext
+(detectable via sequence gaps). What it can't do: read a note, a title, or a key;
+forge an edit; or silently alter one. The WebSocket sync channel carries only
+content-free "a space changed" pokes — the doorbell, never the data.
+
+## Stack
+
+TypeScript, all-MIT: [`@noble`](https://github.com/paulmillr/noble-hashes) /
+[`@scure`](https://github.com/paulmillr/scure-bip39) crypto, CodeMirror 6,
+better-sqlite3, sqlite-vec, [transformers.js](https://github.com/huggingface/transformers.js),
+marked. The relay is a small Node service; the web app is a single esbuild bundle
+with all crypto client-side. 48 unit tests plus ten Playwright browser suites.
 
 MIT © Vortex303
