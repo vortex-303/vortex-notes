@@ -504,3 +504,41 @@ test("live sync: signed subscribers get 'changed' pokes; non-members are refused
     await relay.close();
   }
 });
+
+test("geo: signup country surfaces in admin; the IP is never stored", async () => {
+  freshHome();
+  const { identity: admin } = initIdentity("admin");
+  const relay = await startRelay({ port: 0, adminAccount: admin.file.accountSignPub });
+  const base = `http://127.0.0.1:${relay.port}`;
+  try {
+    const cAdmin = new RelayClient(base, admin);
+    await cAdmin.register(); // localhost → null country
+
+    // a second account registers as if from a US IP (Fly-Client-IP header)
+    freshHome();
+    const { identity: user } = initIdentity("user-us");
+    await fetch(`${base}/v1/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Fly-Client-IP": "8.8.8.8" },
+      body: JSON.stringify({
+        accountSignPub: user.file.accountSignPub,
+        accountEncPub: user.file.accountEncPub,
+        device: user.file.device,
+      }),
+    });
+
+    const stats = (await cAdmin.getAdminStats()) as { byCountry: { country: string; n: number }[] };
+    assert.ok(Array.isArray(stats.byCountry));
+    assert.ok(stats.byCountry.find((c) => c.country === "US"), "US signup counted");
+
+    const rows = await cAdmin.getAdminAccounts();
+    const us = rows.find((r) => r.account === user.file.accountSignPub)!;
+    assert.equal(us.country, "US");
+
+    // the raw IP must appear nowhere the admin can read
+    const dump = JSON.stringify(rows) + JSON.stringify(stats);
+    assert.ok(!dump.includes("8.8.8.8"), "raw IP is never surfaced or stored");
+  } finally {
+    await relay.close();
+  }
+});

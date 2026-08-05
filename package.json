@@ -20,7 +20,7 @@
     "pretest": "tsc -p tsconfig.test.json",
     "build:web": "esbuild src/webapp/main.ts --bundle --minify --format=iife --platform=browser --outfile=dist/webapp/bundle.js",
     "prepublishOnly": "npm run build",
-    "build:assets": "mkdir -p dist/assets/icons && cp assets/demo.svg dist/assets/demo.svg && cp assets/icons/*.png dist/assets/icons/",
+    "build:assets": "mkdir -p dist/assets/icons dist/assets/geo && cp assets/demo.svg dist/assets/demo.svg && cp assets/icons/*.png dist/assets/icons/ && cp assets/geo/country.mmdb dist/assets/geo/",
     "test:e2e": "npm run build && node test/e2e-webapp.mjs && node test/e2e-lock.mjs && node test/e2e-public.mjs && node test/e2e-usermenu.mjs && node test/e2e-session.mjs"
   },
   "keywords": [
@@ -45,6 +45,7 @@
     "codemirror": "^6.0.2",
     "gray-matter": "^4.0.3",
     "marked": "^15.0.12",
+    "maxmind": "^4.3.29",
     "node-diff3": "^3.2.1",
     "sqlite-vec": "^0.1.6",
     "ulid": "^2.3.0",

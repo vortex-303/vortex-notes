@@ -1540,6 +1540,10 @@ async function renderAdmin(): Promise<void> {
     card("public notes", s.publicNotes) +
     card("pending pairings", s.pendingPairings) +
     card("spaces", s.spaces);
+  const byCountry = ((st as { byCountry?: { country: string; n: number }[] }).byCountry ?? []);
+  $("#adminCountries").innerHTML = byCountry.length
+    ? byCountry.map((c) => `<span class="ctag">${esc(c.country)} <b>${c.n}</b></span>`).join("")
+    : '<span class="ctag">no data yet</span>';
   const day = (iso: string | null) => (iso ? iso.slice(0, 10) : "never");
   $("#adminAccts").innerHTML = accts
     .map((a) => {
@@ -1554,7 +1558,7 @@ async function renderAdmin(): Promise<void> {
           <div class="tagbtns">
             <button data-tag="mine">mine</button><button data-tag="test">test</button>${a.tag ? '<button data-tag="">clear</button>' : ""}
           </div></div>
-        <div class="meta">${day(a.firstSeen)} → ${day(a.lastActive)} · ${a.updates} upd · ${(a.bytesUsed / 1000).toFixed(1)} KB<br>
+        <div class="meta">${day(a.firstSeen)} → ${day(a.lastActive)} · ${a.updates} upd · ${(a.bytesUsed / 1000).toFixed(1)} KB${a.country ? " · " + esc(a.country) : ""}<br>
           ${devices || "no devices"}${agents ? ` · agents: ${agents}` : ""}${pubs}</div>
       </div>`;
     })

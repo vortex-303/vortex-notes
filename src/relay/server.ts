@@ -24,6 +24,7 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import { verify, fromHex, toHex, utf8 } from "../crypto.js";
 import { verifyDeviceCert, verifyAgentChain, type DeviceCertPayload, type SignedCert } from "../account.js";
 import { landingShell } from "./landing.js";
+import { openGeo, countryFromReader, clientIp } from "./geo.js";
 import { renderPublicPage, type PublicTheme } from "./publicpage.js";
 import { icon, ICON_CSS } from "../icons.js";
 import { marked } from "marked";
@@ -137,12 +138,17 @@ export async function startRelay(
     );
   `);
 
+  // Migration: coarse country per device (only a 2-letter code is ever stored).
+  const deviceCols = (db.prepare("PRAGMA table_info(devices)").all() as { name: string }[]).map((c) => c.name);
+  if (!deviceCols.includes("country")) db.exec("ALTER TABLE devices ADD COLUMN country TEXT");
+
   // Backfill usage counters for accounts created before quotas existed.
   db.exec(
     "INSERT OR REPLACE INTO accounts (account, bytesUsed) " +
       "SELECT s.account, COALESCE(SUM(LENGTH(u.blob)), 0) " +
       "FROM spaces s LEFT JOIN updates u ON u.space = s.id GROUP BY s.account;"
   );
+  const geo = await openGeo();
   const quota = opts.quotaBytes && opts.quotaBytes > 0 ? opts.quotaBytes : null;
   const usageOf = (account: string): number =>
     (db.prepare("SELECT bytesUsed FROM accounts WHERE account=?").get(account) as { bytesUsed: number } | undefined)
@@ -326,10 +332,12 @@ export async function startRelay(
       } else if (!verifyDeviceCert(fromHex(accountSignPub), device)) {
         return sendJson(res, 401, { error: "Device certificate not signed by that account" });
       }
+      // Coarse country only, derived in memory; the IP is never stored or logged.
+      const country = countryFromReader(geo, clientIp(req.headers, req.socket?.remoteAddress));
       db.prepare(
-        `INSERT INTO devices (signPub, encPub, account, cert, createdAt) VALUES (?, ?, ?, ?, ?)
-         ON CONFLICT(signPub) DO UPDATE SET cert=excluded.cert`
-      ).run(device.signPub, device.encPub, accountSignPub, JSON.stringify(device), new Date().toISOString());
+        `INSERT INTO devices (signPub, encPub, account, cert, createdAt, country) VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(signPub) DO UPDATE SET cert=excluded.cert, country=COALESCE(devices.country, excluded.country)`
+      ).run(device.signPub, device.encPub, accountSignPub, JSON.stringify(device), new Date().toISOString(), country);
       return sendJson(res, 200, { ok: true });
     }
 
@@ -437,6 +445,9 @@ export async function startRelay(
         publicNotes: one("SELECT COUNT(*) n FROM public_notes").n ?? 0,
         pendingPairings: one("SELECT COUNT(*) n FROM pair_requests WHERE approvedBlob IS NULL").n ?? 0,
         newAccounts: one("SELECT COUNT(DISTINCT account) n FROM devices WHERE account NOT IN (SELECT account FROM admin_tags)").n ?? 0,
+        byCountry: db
+          .prepare("SELECT country, COUNT(DISTINCT account) n FROM devices WHERE country IS NOT NULL GROUP BY country ORDER BY n DESC, country")
+          .all(),
         topAccounts: db
           .prepare("SELECT substr(account,1,8) id, bytesUsed FROM accounts ORDER BY bytesUsed DESC LIMIT 5")
           .all(),
@@ -462,6 +473,7 @@ export async function startRelay(
           principals,
           publicTitles: (db.prepare("SELECT title FROM public_notes WHERE account=?").all(acc) as { title: string }[]).map((r) => r.title),
           tag: (db.prepare("SELECT tag FROM admin_tags WHERE account=?").get(acc) as { tag: string } | undefined)?.tag ?? null,
+          country: (db.prepare("SELECT country FROM devices WHERE account=? AND country IS NOT NULL LIMIT 1").get(acc) as { country: string } | undefined)?.country ?? null,
         };
       });
       return sendJson(res, 200, { accounts });
@@ -880,6 +892,9 @@ function appShell(_nonce: string): string {
   .statcard { border:1px solid var(--line); border-radius:9px; padding:0.6rem 0.75rem; }
   .statcard b { display:block; font:700 1.25rem var(--sans); font-variant-numeric:tabular-nums; }
   .statcard span { font:600 0.6rem var(--mono); letter-spacing:0.1em; text-transform:uppercase; color:var(--ink-faint); }
+  .countries { display:flex; flex-wrap:wrap; gap:0.35rem; }
+  .ctag { font:600 0.72rem var(--mono); border:1px solid var(--line); border-radius:99px; padding:0.15rem 0.55rem; }
+  .ctag b { color:var(--accent); font-weight:700; }
   .adminaccts { max-height:16rem; overflow-y:auto; display:flex; flex-direction:column; gap:0.45rem; }
   .adrow { border:1px solid var(--line); border-radius:9px; padding:0.5rem 0.65rem; }
   .adrow .l1 { display:flex; align-items:center; gap:0.5rem; }
@@ -1253,6 +1268,9 @@ function appShell(_nonce: string): string {
   <div id="adminModal" role="dialog" aria-label="Admin stats">
     <div class="tipshead"><strong>Relay stats</strong><button class="iconbtn" id="adminClose" aria-label="Close">${icon("x")}</button></div>
     <div id="adminGrid" class="admingrid"></div>
+    <div class="acctlabel" style="margin-top:0.9rem">By country</div>
+    <p class="tipsintro" style="margin:0.2rem 0 0.4rem">Coarse country from IP, in memory only — the address itself is never stored.</p>
+    <div id="adminCountries" class="countries"></div>
     <div class="acctlabel" style="margin-top:0.9rem">Accounts</div>
     <p class="tipsintro" style="margin:0.2rem 0 0.4rem">Tag your own accounts once — anything untagged after that is a real user.</p>
     <div id="adminAccts" class="adminaccts"></div>

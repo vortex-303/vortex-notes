@@ -132,6 +132,10 @@ What a malicious or subpoenaed relay can do: serve stale or withheld ciphertext
 forge an edit; or silently alter one. The WebSocket sync channel carries only
 content-free "a space changed" pokes — the doorbell, never the data.
 
+For a broad usage view, the relay derives a coarse **country** (two-letter code)
+from your IP in memory and stores only that code — the IP itself is never written
+to disk or logged.
+
 ## Stack
 
 TypeScript, all-MIT: [`@noble`](https://github.com/paulmillr/noble-hashes) /

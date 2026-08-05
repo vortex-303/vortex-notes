@@ -16,6 +16,7 @@ export interface AdminAccountRow {
   principals: { name: string; kind: string; createdAt: string }[];
   publicTitles: string[];
   tag: string | null;
+  country: string | null;
 }
 
 export interface RemoteUpdate {
