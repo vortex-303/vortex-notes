@@ -1135,12 +1135,13 @@ function appShell(_nonce: string): string {
       padding-top:env(safe-area-inset-top); padding-bottom:env(safe-area-inset-bottom); }
     #main .pane { display:none; }
     #main.note-open aside { display:none; }
-    #main.note-open .pane { display:block; height:100dvh;
-      padding-top:env(safe-area-inset-top); }
+    #main.note-open .pane { display:block; height:100dvh; background:var(--ground); }
     .backbtn { display:inline-block; }
-    #note { padding:1rem 1.1rem 6rem; }
+    #note { padding:0 1.1rem 6rem; }
+    /* The sticky header owns the safe-area inset so its opaque background covers
+       the notch — no transparent strip for content to scroll through. */
     .notehead { position:sticky; top:0; background:var(--ground); z-index:2;
-      padding-top:0.6rem; }
+      padding-top:calc(0.6rem + env(safe-area-inset-top)); }
     .notehead h1 { font-size:1.5rem; }
     /* 16px inputs stop iOS zoom-on-focus; bigger touch targets everywhere */
     #filter, .dailybox input, #phrase { font-size:16px; }
