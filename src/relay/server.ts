@@ -835,7 +835,7 @@ function appShell(_nonce: string): string {
 
   #main { display:none; height:100vh; }
   aside { width:290px; flex:none; background:var(--surface); border-right:1px solid var(--line);
-    display:flex; flex-direction:column; overflow-y:auto; }
+    display:flex; flex-direction:column; overflow:hidden; }
   .bar { display:flex; gap:0.4rem; align-items:center; padding:0.95rem 1rem 0.7rem; }
   .bar .wordmark { margin-right:auto; }
   .iconbtn { background:none; border:1px solid var(--line); border-radius:6px; color:var(--ink-soft);
@@ -955,7 +955,7 @@ function appShell(_nonce: string): string {
   #filter { margin:0 1rem 0.6rem; padding:0.48rem 0.7rem; border:1px solid var(--line); border-radius:7px;
     background:var(--ground); color:var(--ink); font:0.83rem var(--sans); outline:none; }
   #filter:focus { border-color:var(--accent); }
-  #list { flex:1; padding:0 0.5rem 1rem; }
+  #list { flex:1 1 0; min-height:0; overflow-y:auto; padding:0 0.5rem 1rem; }
   .folder { font:600 0.62rem var(--mono); letter-spacing:0.12em; text-transform:uppercase;
     color:var(--ink-faint); padding:0.9rem 0.5rem 0.3rem; }
   #list a { display:block; padding:0.32rem 0.5rem; border-radius:6px; color:var(--ink-soft); font-size:0.86rem;
