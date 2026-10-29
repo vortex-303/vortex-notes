@@ -499,7 +499,7 @@ export function appShell(_nonce: string): string {
     <div class="tipshead"><strong>Pair an agent</strong><button class="iconbtn" id="pairClose" aria-label="Close">${icon("x")}</button></div>
     <div id="pairStep1">
       <p class="tipsintro">On the agent's machine, run
-      <code>npx vortex-notes pair</code>
+      <code>npx -y vortex-notes@latest pair</code>
       and type the 6-letter code it shows:</p>
       <input id="pairCode" class="pairinput" placeholder="e.g. KM3PXR" maxlength="6" autocomplete="off" autocapitalize="characters">
       <button id="pairLookup" class="pairgo">Look up</button>

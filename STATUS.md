@@ -1,5 +1,47 @@
 # Vortex Notes — Status
 
+## ▶ Resume here (handoff 2026-10-28)
+State: everything live + committed (`f49775d`, main, NOT pushed — repo is public;
+push needs `gh auth switch -u vortex-303`). npm 0.1.8 published. Relay =
+https://vortex-notes.pages.dev (`npm run cf:deploy`). Fly app destroyed.
+
+User's setup on this Mac:
+- New web account; Account ID `3e5b7fb0…13a1` = RELAY_ADMIN_ACCOUNT (admin panel on).
+  ⚠ The user pasted a set of 12 words into chat on 2026-10-28 — advised a fresh
+  account or Account → "Change my 12 words". If they make a new account, swap the
+  new Account ID into deploy/cf/wrangler.toml [vars] and redeploy.
+- This Mac paired as agent "macbook": vault `~/.vortex-agents/macbook-188bf3e2/vault`
+  (has test-note.md, code 0069). Wired into Claude Code (user scope, ✔ Connected),
+  Hermes, OpenCode. Restart Claude Code → use the vortex-notes MCP tools directly.
+- Global `vortex-notes` 0.1.8 in ~/.local (npx prefers it over downloading!).
+  Install scripts for onnxruntime-node/sharp were skipped → semantic search may
+  fail; fix: `npm install -g --allow-scripts=onnxruntime-node,sharp,protobufjs vortex-notes@latest`.
+- Old Fly-era state backed up in ~/vortex-old. ~/Documents/main/.vortex was
+  recreated (no sync link) — the user's Obsidian vault is NOT in the new account.
+
+Agent CLI (2026-10-29, built, 0.1.9 NOT published): `search read write edit daily
+remember context recent list` = the MCP tools as commands (src/agentcli.ts →
+src/tools.ts VaultTools, shared with mcp.ts). Pull before / push after write when
+linked, --json, --offline, stdin via "-". Implicit default ~/VortexNotes yields to
+the sole paired vault (a stale Fly-era ~/VortexNotes exists on this Mac). Empty
+VORTEX_NOTES_VAULT = unset. OpenClaw skill rewritten around the commands.
+User must `npm publish` 0.1.9 (then `npm i -g vortex-notes@latest` — npx prefers the global).
+
+Open items / next:
+1. Verify MCP in a fresh Claude Code session (search/remember round-trip to web app).
+2. Harness entries launch node from `~/.hermes/node/bin/node` (Hermes's bundled
+   node, first on PATH when pair ran) — fragile. Switch to /opt/homebrew/bin/node
+   and make wire.ts avoid ~/.hermes/node (offered, not done).
+3. Real claude.ai + ChatGPT connector test (only protocol-level stand-in tested).
+   Later: OAuth instead of secret URL.
+4. Pair gpubox (Hermes there) with `npx -y vortex-notes pair`.
+5. Optional: upload ~/Documents/main (Obsidian) into the new account (needs
+   phrase flow: `vortex-notes setup` / `sync link`, not pair).
+6. "DeepSeek harness" (user's "DSH"): unknown tool, not installed here — use
+   connector URL if it takes remote MCP, else pair's "Any MCP" line.
+7. Tag the throwaway e2e account in Admin stats as "test".
+8. External links still on vortex-relay.fly.dev: awesome-mcp PR icon URLs, HN post.
+
 ## Hosted MCP connectors (2026-10-28) — claude.ai / ChatGPT
 - Web: Agents & devices → "Connect a chat app": browser makes a cloud-agent keypair,
   certifies + seals the space key (`grantAgent` in webapp, shared with pair approve),

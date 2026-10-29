@@ -124,6 +124,8 @@ export function landingShell(nonce: string): string {
   h3 { font:650 1.02rem var(--sans); margin:1.9rem 0 0.4rem; }
   p { max-width:41rem; }
   .note { font-size:0.85rem; color:var(--ink-faint); max-width:41rem; }
+  .agent .fine { font-size:0.8rem; color:var(--ink-faint); margin-top:0.5rem; }
+  .promise a { color:inherit; }
 
   .codewrap { position:relative; max-width:41rem; }
   pre { background:var(--code-bg); color:var(--code-ink); border-radius:10px; padding:0.95rem 1.1rem;
@@ -195,7 +197,7 @@ export function landingShell(nonce: string): string {
 <body>
 <nav class="top"><div class="in">
   <span class="navmark"><span class="mark" aria-hidden="true">${MARK}</span><span><span class="vx">Vortex</span> Notes</span></span>
-  <a class="dlink" href="#you">For you</a><a class="dlink" href="#agents">For agents</a><a class="dlink" href="#selfhost">Self-host</a><a class="navcta" href="/app">Open app →</a>
+  <a class="dlink" href="#you">For you</a><a class="dlink" href="#agents">Connect your AI</a><a class="dlink" href="#selfhost">Self-host</a><a class="navcta" href="/app">Open app →</a>
 </div></nav>
 <div class="page">
 
@@ -208,7 +210,7 @@ export function landingShell(nonce: string): string {
   Agents get their own keys: scoped, attributed, revocable.</p>
   <div class="ctarow">
     <a class="cta big" href="/app">Open the app →</a>
-    <a class="cta ghost" href="https://www.npmjs.com/package/vortex-notes">Install the CLI</a>
+    <a class="cta ghost" href="#agents">Connect your AI</a>
   </div>
   <div class="mock" aria-hidden="true">
     <div class="mockbar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
@@ -237,7 +239,8 @@ export function landingShell(nonce: string): string {
   </div>
   <div class="promise"><strong>This server stores ciphertext only.</strong> Your 12-word recovery
   phrase is your whole identity — keys are derived in your browser or on your devices, never here.
-  There is no password reset, because there is nothing here to reset.</div>
+  There is no password reset, because there is nothing here to reset. The one exception is yours to
+  make: <a href="#agents">connecting a chat app</a> hands this server that one agent's key.</div>
 </header>
 </section>
 
@@ -250,28 +253,43 @@ export function landingShell(nonce: string): string {
   <li><div>On your phone: same URL → Share → <em>Add to Home Screen</em>. Everything syncs.</div></li>
   <li><div>On your computer, your notes become a plain folder of markdown — Obsidian-compatible, greppable, yours:</div></li>
 </ol>
-<div class="codewrap"><pre>npm install -g vortex-notes
+<div class="codewrap"><pre>npm install -g vortex-notes@latest
 vortex-notes setup                   <span class="c"># asks your 12 words — that's the whole setup</span>
 vortex-notes search "that idea"      <span class="c"># semantic search, fully local, any language</span></pre><button class="copy">copy</button></div>
-<p class="note">Your notes appear as a plain folder of markdown (<code>~/VortexNotes</code>) and stay
-in sync. Power users: the <code>identity</code>, <code>sync</code>, and <code>space</code> subcommands
+<p class="note">Needs Node 20+. Your notes appear as a plain folder of markdown (<code>~/VortexNotes</code>)
+and stay in sync; the first search downloads a small on-device model (~120MB) once. Power users: the <code>identity</code>, <code>sync</code>, and <code>space</code> subcommands
 do each step individually, including pointing at a self-hosted relay.</p>
 
 </section>
 <section class="door" id="agents">
-<span class="k">Door 2 · For your agents</span>
+<span class="k">Door 2 · Connect your AI</span>
 <h2>Agents are principals, not passengers</h2>
-<p>An agent gets <strong>its own key</strong> — generated on its machine, never transmitted —
-certified by yours, scoped to the spaces you grant, read-only if you say so. Every edit it makes
-is signed as the agent. Revoking takes one tap.</p>
+<p>Every AI you connect gets <strong>its own key</strong>, certified by yours, scoped to the spaces you
+grant, read-only if you say so. Every edit it makes is signed as that agent, and revoking one takes a
+tap in <em>Agents &amp; devices</em>. Pick how your AI reaches your notes:</p>
 
-<h3>Connect any agent machine — one command, nothing to configure</h3>
-<div class="codewrap"><pre>npx vortex-notes pair</pre><button class="copy">copy</button></div>
+<div class="agents">
+  <div class="agent"><h4>Claude.ai · ChatGPT <span>no install</span></h4>
+    <p>In the app: <em>Agents &amp; devices</em> → <em>Connect a chat app</em> → copy the URL.</p>
+    <p><strong>Claude</strong>: Settings → Connectors → Add custom connector → paste.
+    <strong>ChatGPT</strong>: Settings → Apps &amp; Connectors → Advanced → Developer mode → Create → paste.</p>
+    <p class="fine">Chat apps can only reach a server, so this server holds that connector's key and can
+    read the notes it's allowed to see — the chat app sees them too. Your other devices and agents stay
+    end-to-end encrypted.</p>
+  </div>
+  <div class="agent"><h4>Claude Code · Hermes · OpenCode <span>on your computer</span></h4>
+    <p>One command on the machine the agent runs on (Node 20+), then approve the code in the app:</p>
+    <div class="codewrap"><pre>npx -y vortex-notes@latest pair</pre><button class="copy">copy</button></div>
+    <p class="fine">Keys are generated on that machine and never leave it — fully end-to-end encrypted.</p>
+  </div>
+</div>
+
+<h3>How pairing works</h3>
     <img class="demo" src="/demo.svg" alt="install, cross-lingual search, pair an agent" width="740">
 <div class="pairviz">
   <span class="box"><b>agent machine</b>shows <span class="code">KM3PXR</span></span>
   <span class="arrow">→</span>
-  <span class="box"><b>your phone</b>⋯ menu → Pair an agent<br>approve · read-only optional</span>
+  <span class="box"><b>your phone</b>Agents &amp; devices → Pair an agent<br>approve · read-only optional</span>
   <span class="arrow">→</span>
   <span class="box"><b>done</b>agent syncs — scoped &amp; signed</span>
 </div>
@@ -280,8 +298,7 @@ command wires up every harness it finds on that machine:</p>
 
 <div class="agents">
   <div class="agent"><h4>Claude Code <span>MCP · pairing</span></h4>
-    <p><code>npx vortex-notes pair</code> adds it for <em>every</em> project once you approve —
-    restart any open session.</p>
+    <p>Added for <em>every</em> project once you approve — restart any open session.</p>
   </div>
   <div class="agent"><h4>Hermes <span>MCP · pairing</span></h4>
     <p>Same command on the Hermes machine (SSH is fine — you approve from your phone), then type
@@ -300,16 +317,22 @@ command wires up every harness it finds on that machine:</p>
     <p>Pair first, then point the client at the vault path <code>pair</code> printed:</p>
     <div class="codewrap"><pre>{ "command": "npx", "args": ["-y", "vortex-notes", "mcp"], "env": { "VORTEX_NOTES_VAULT": "/path/from/pair" } }</pre><button class="copy">copy</button></div>
   </div>
+  <div class="agent"><h4>Agents without MCP <span>CLI · shell</span></h4>
+    <p>Every MCP tool is also a command — <code>search</code>, <code>context</code>, <code>read</code>,
+    <code>daily</code>, <code>remember</code>, <code>write</code>, <code>edit</code> — with
+    <code>--json</code>. Install once; after <code>pair</code> they find the vault and sync on their own:</p>
+    <div class="codewrap"><pre>npm install -g vortex-notes@latest
+vortex-notes remember "Kiln max is cone 8" --topic kiln</pre><button class="copy">copy</button></div>
+  </div>
   <div class="agent"><h4>Everything else <span>plain files</span></h4>
-    <p>The vault is a folder of markdown. Any tool that reads files already works, and
-    <code>vortex-notes search</code> gives it local semantic search. Add <code>--read-only</code>
-    to any MCP command for search-and-read-only access.</p>
+    <p>The vault is a folder of markdown, so any tool that reads files already works. Add
+    <code>--read-only</code> to <code>mcp</code> or any command for search-and-read-only access.</p>
   </div>
 </div>
 <p class="note">Agent tools: <code>search_notes</code> · <code>read_note</code> · <code>write_note</code> ·
 <code>edit_note</code> · <code>append_daily</code> · <code>remember</code> (facts that supersede, never delete) ·
-<code>build_context</code> · <code>recent_activity</code>. Revoke any agent:
-<code>vortex-notes agent revoke &lt;name&gt;</code>.</p>
+<code>build_context</code> · <code>recent_activity</code> · <code>list_notes</code>. Revoke any agent or
+chat connector in the app: <em>Agents &amp; devices</em> → <em>Revoke</em>.</p>
 
 </section>
 <section class="door" id="selfhost">
@@ -324,12 +347,12 @@ encrypted blobs it cannot read. Point every command above at it with <code>--rel
 <footer>Vortex Notes · MIT ·
   <a href="https://github.com/vortex-303/vortex-notes">GitHub</a> ·
   <a href="https://www.npmjs.com/package/vortex-notes">npm</a> ·
-  zero plaintext on this server, by design</footer>
+  zero plaintext on this server unless you connect a chat app</footer>
 </div>
 <nav class="tabbar" aria-label="Sections">
   <button data-t="home" class="on">${icon("read")}<span>Home</span></button>
   <button data-t="you">${icon("edit")}<span>For you</span></button>
-  <button data-t="agents">${icon("agent")}<span>Agents</span></button>
+  <button data-t="agents">${icon("agent")}<span>Your AI</span></button>
   <button data-t="selfhost">${icon("storage")}<span>Self-host</span></button>
 </nav>
 <script nonce="${nonce}">
@@ -344,6 +367,14 @@ doorTabs.forEach(function (b) {
     if (open) open.scrollTop = 0;
   });
 });
+// On phones the doors are tabs: in-page links (and a #hash on load) switch tab too.
+function openDoor(id) {
+  doorTabs.forEach(function (b) { if (b.dataset.t === id) b.click(); });
+}
+document.querySelectorAll('a[href^="#"]').forEach(function (a) {
+  a.addEventListener("click", function () { openDoor(a.getAttribute("href").slice(1)); });
+});
+if (location.hash) openDoor(location.hash.slice(1));
 document.querySelectorAll(".copy").forEach(function (btn) {
   btn.addEventListener("click", function () {
     var pre = btn.parentElement.querySelector("pre");

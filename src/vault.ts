@@ -28,8 +28,8 @@ export class Vault {
     // MCP configs launch us without a shell, so a "~/..." path arrives unexpanded.
     const expand = (p?: string) => (p && (p === "~" || p.startsWith("~/")) ? path.join(os.homedir(), p.slice(1)) : p);
     const root =
-      expand(explicit) ??
-      expand(process.env.VORTEX_NOTES_VAULT) ??
+      expand(explicit) ||
+      expand(process.env.VORTEX_NOTES_VAULT) || // empty = unset
       (fs.existsSync(path.join(process.cwd(), ".vortex"))
         ? process.cwd()
         : path.join(os.homedir(), "VortexNotes"));

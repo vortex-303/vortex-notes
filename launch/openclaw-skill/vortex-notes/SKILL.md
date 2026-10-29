@@ -14,50 +14,57 @@ metadata:
 
 # Vortex Notes
 
-The user's knowledge base is a folder of plain markdown ("the vault"). You can
-work with it two ways — prefer the CLI for search, plain file reads for content.
+The user's knowledge base is a folder of plain markdown ("the vault"), end-to-end
+encrypted and synced to their other devices. Work with it through the
+`vortex-notes` commands below — they are the same tools the MCP server exposes,
+they apply the vault's conventions for you, and they sync before reading and
+after writing. Add `--json` to any command for structured output.
 
-Find the vault: `$VORTEX_NOTES_VAULT` if set, else `~/VortexNotes`, else ask once
-and remember it.
+Setup (once per machine): `npm install -g vortex-notes@latest`, then
+`vortex-notes pair` — the user approves a code in their app. After that every command finds the paired vault by itself. Otherwise
+pass `--vault <dir>` (or set `$VORTEX_NOTES_VAULT`).
 
-## Search (always start here)
+## Find things — always start here
 
 ```
-vortex-notes search "<query>" --vault <vault>
+vortex-notes search "<query>"           # hybrid keyword + multilingual semantic
+vortex-notes context "<topic>"          # top notes in full + linked notes, one call
+vortex-notes read <path>                # one note, full markdown
+vortex-notes recent --days 7            # what changed lately
+vortex-notes list [folder]              # note paths
 ```
 
-Hybrid keyword + multilingual semantic search — natural-language queries work
-("that idea about pricing"), and queries in one language find notes in another.
-Results show `path › heading` plus a snippet; read the file for full content.
-
-## Read
-
-Notes are plain `.md` files with YAML frontmatter (`title`, `tags`, `created`,
-`updated`). `[[Wikilinks]]` reference other notes by title or filename —
-follow them for context.
+Natural-language queries work ("that idea about pricing"), and a query in one
+language finds notes in another. Prefer `context` when starting work on a topic.
 
 ## Write
 
-- **Daily journal** (observations, decisions, things that happened):
-  append a bullet to `daily/YYYY-MM-DD.md` in the vault:
-  `- **HH:MM** <entry>`  — create the file with a `title: YYYY-MM-DD` frontmatter
-  and a `daily` tag if it doesn't exist.
-- **Durable facts** ("remember that X"): append to `memory/facts.md`
-  (or `memory/<topic>.md`) as `- **YYYY-MM-DD** <fact> \`^f-<8 random chars>\``.
-  If the fact REPLACES an earlier one, strike the old line through
-  (`- ~~old line~~ → superseded YYYY-MM-DD by \`^f-new\``) and keep it —
-  never delete history.
-- **New notes**: create `<kebab-case-title>.md` (optionally in a folder) with
-  frontmatter `title:` and `created:`/`updated:` ISO timestamps.
-- **Edits**: edit surgically (append a section, fix a line). Never rewrite a
-  whole note unless asked. Preserve frontmatter; bump `updated`.
+```
+vortex-notes daily "<entry>"                         # observations, decisions, what happened
+vortex-notes remember "<fact>" [--topic <t>]         # durable facts ("remember that X")
+vortex-notes remember "<new fact>" --supersedes <^id or distinctive text>
+vortex-notes write "<Title>" "<markdown>" [--folder f] [--tags a,b]
+vortex-notes edit <path> --append "<text>"           # or --prepend, or --find "<old>" --replace "<new>"
+```
 
-After any write, the vault's watcher reindexes automatically — no extra step.
+- Search for an existing fact before `remember`; if the new fact replaces it,
+  pass `--supersedes` — the old fact stays visible, struck through. Never delete
+  history.
+- Edit surgically (`edit --append`, `--find/--replace`); never rewrite a whole
+  note unless asked. `write` refuses to overwrite an existing note.
+- Long content: pass `-` and pipe it on stdin (`… | vortex-notes write "Title" -`).
+- Commands exit 1 on error; with `--json` the error is `{"error": "…"}` on stdout.
+
+## Notes on the vault
+
+Notes have YAML frontmatter (`title`, `tags`, `created`, `updated`).
+`[[Wikilinks]]` reference other notes by title or filename — follow them for
+context. Password-protected notes show only their title; their content is
+encrypted and can't be read here.
 
 ## MCP alternative
 
-If this agent supports MCP, `vortex-notes mcp --vault <vault>` (stdio) exposes
-task-shaped tools (`search_notes`, `read_note`, `write_note`, `edit_note`,
-`append_daily`, `remember` with supersession, `build_context`) and a
-`--read-only` flag. Prefer MCP when available — `remember` and `build_context`
-encode the conventions above.
+If this agent supports MCP, `vortex-notes mcp` (stdio) exposes the same tools
+(`search_notes`, `read_note`, `write_note`, `edit_note`, `append_daily`,
+`remember`, `build_context`, `recent_activity`, `list_notes`); `npx vortex-notes
+pair` wires it into Claude Code, Hermes and OpenCode automatically.

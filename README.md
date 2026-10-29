@@ -80,7 +80,7 @@ install it. That's the whole onboarding — no email, no password.
 On the agent's machine:
 
 ```sh
-npx vortex-notes pair
+npx -y vortex-notes@latest pair
 ```
 
 It prints a 6-letter code; approve it in the app (user menu → **Agents & devices** →
@@ -118,6 +118,27 @@ vortex-notes init                              # create a vault
 vortex-notes search "that idea about pricing"  # hybrid semantic + keyword
 vortex-notes serve                             # local web viewer at 127.0.0.1:7303
 ```
+
+### Agents without MCP: the same tools as commands
+
+Every MCP tool is also a command, so any agent that can run a shell (OpenClaw-style
+harnesses, scripts, cron, git hooks) gets the same behavior. After `pair`, commands
+find the paired vault by themselves; each one syncs before reading and after writing.
+
+```sh
+npm install -g vortex-notes@latest                # once, so `vortex-notes` is on PATH
+vortex-notes context "kiln"                       # top notes in full + linked notes
+vortex-notes read projects/kiln.md
+vortex-notes daily "fired the test tiles"
+vortex-notes remember "Kiln max is cone 8" --topic kiln --supersedes "cone 10"
+vortex-notes write "Glaze tests" "Three recipes…" --folder studio --tags glaze
+vortex-notes edit clay.md --append "Order more in May."
+vortex-notes recent --days 3 --json               # --json on any command
+```
+
+`write`/`edit`/`daily`/`remember` read stdin when the text is `-`. Errors exit 1
+(`{"error": …}` with `--json`). Full list: `vortex-notes --help`. There's a ready
+[OpenClaw skill](launch/openclaw-skill/vortex-notes/SKILL.md) built on these.
 
 The index in `.vortex/index.db` is disposable — the markdown files are always the
 source of truth. `VORTEX_NOTES_NO_SEMANTIC=1` skips embeddings (keyword only, no

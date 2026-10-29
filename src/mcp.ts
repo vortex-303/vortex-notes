@@ -1,13 +1,9 @@
-import fs from "node:fs";
-import path from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { Vault, slugify } from "./vault.js";
+import { Vault } from "./vault.js";
 import { Indexer, startVaultWatcher } from "./indexer.js";
-import { search } from "./search.js";
-import { buildContext } from "./context.js";
-import { isLockedContent } from "./notelock.js";
+import { VaultTools } from "./tools.js";
 
 export interface McpOptions {
   readOnly: boolean;
@@ -29,10 +25,8 @@ export async function startMcpServer(vault: Vault, opts: McpOptions): Promise<vo
   startAutoSync(vault); // no-op unless linked to a relay
 
   const server = new McpServer({ name: "vortex-notes", version: "0.1.0" });
+  const tools = new VaultTools(vault, indexer, opts.readOnly);
   const text = (s: string) => ({ content: [{ type: "text" as const, text: s }] });
-  const guardWrite = () => {
-    if (opts.readOnly) throw new Error("This vault is connected in read-only mode.");
-  };
 
   server.registerTool(
     "search_notes",
@@ -47,18 +41,7 @@ export async function startMcpServer(vault: Vault, opts: McpOptions): Promise<vo
       },
       annotations: { readOnlyHint: true },
     },
-    async ({ query, limit, mode }) => {
-      const results = await search(indexer, query, limit ?? 8, mode ?? "hybrid");
-      if (!results.length) return text("No results.");
-      return text(
-        results
-          .map(
-            (r, i) =>
-              `${i + 1}. ${r.path}${r.heading ? ` › ${r.heading}` : ""} — ${r.title}\n${r.snippet}`
-          )
-          .join("\n\n")
-      );
-    }
+    async ({ query, limit, mode }) => text((await tools.searchNotes(query, limit ?? 8, mode ?? "hybrid")).text)
   );
 
   server.registerTool(
@@ -69,14 +52,7 @@ export async function startMcpServer(vault: Vault, opts: McpOptions): Promise<vo
       inputSchema: { path: z.string().describe("Vault-relative path, e.g. 'projects/idea.md'") },
       annotations: { readOnlyHint: true },
     },
-    async ({ path: rel }) => {
-      const note = vault.readNote(rel);
-      const tags = note.tags.length ? ` | tags: ${note.tags.join(", ")}` : "";
-      if (isLockedContent(note.body) || isLockedContent(`---\n---\n${note.body}`)) {
-        return text(`# ${note.title}\npath: ${note.path}${tags}\n\n[This note is password-protected. Its contents are encrypted and cannot be read here.]`);
-      }
-      return text(`# ${note.title}\npath: ${note.path}${tags}\n\n${note.body}`);
-    }
+    async ({ path: rel }) => text(tools.readNote(rel).text)
   );
 
   server.registerTool(
@@ -92,17 +68,7 @@ export async function startMcpServer(vault: Vault, opts: McpOptions): Promise<vo
         tags: z.array(z.string()).optional(),
       },
     },
-    async ({ title, content, folder, tags }) => {
-      guardWrite();
-      const rel = path.posix.join(folder ?? "", slugify(title) + ".md");
-      if (fs.existsSync(vault.abs(rel))) {
-        throw new Error(`Note already exists: ${rel}. Use edit_note to modify it.`);
-      }
-      vault.writeNote(rel, title, content, tags ?? []);
-      indexer.indexNote(rel);
-      void indexer.embedPending();
-      return text(`Created ${rel}`);
-    }
+    async ({ title, content, folder, tags }) => text(tools.writeNote(title, content, folder, tags ?? []).text)
   );
 
   server.registerTool(
@@ -119,22 +85,7 @@ export async function startMcpServer(vault: Vault, opts: McpOptions): Promise<vo
       },
       annotations: { destructiveHint: true },
     },
-    async ({ path: rel, operation, content, find }) => {
-      guardWrite();
-      const note = vault.readNote(rel);
-      let body: string;
-      if (operation === "append") body = note.body.trimEnd() + "\n\n" + content.trim();
-      else if (operation === "prepend") body = content.trim() + "\n\n" + note.body.trimStart();
-      else {
-        if (!find) throw new Error("find_replace requires 'find'");
-        if (!note.body.includes(find)) throw new Error(`String not found in ${rel}: ${JSON.stringify(find.slice(0, 80))}`);
-        body = note.body.replace(find, content);
-      }
-      vault.updateNote(rel, body);
-      indexer.indexNote(rel);
-      void indexer.embedPending();
-      return text(`Updated ${rel} (${operation})`);
-    }
+    async ({ path: rel, operation, content, find }) => text(tools.editNote(rel, operation, content, find).text)
   );
 
   server.registerTool(
@@ -148,13 +99,7 @@ export async function startMcpServer(vault: Vault, opts: McpOptions): Promise<vo
         date: z.string().optional().describe("YYYY-MM-DD (default: today)"),
       },
     },
-    async ({ content, date }) => {
-      guardWrite();
-      const rel = vault.appendDaily(content, date);
-      indexer.indexNote(rel);
-      void indexer.embedPending();
-      return text(`Appended to ${rel}`);
-    }
+    async ({ content, date }) => text(tools.appendDaily(content, date).text)
   );
 
   server.registerTool(
@@ -169,7 +114,7 @@ export async function startMcpServer(vault: Vault, opts: McpOptions): Promise<vo
       },
       annotations: { readOnlyHint: true },
     },
-    async ({ topic, max_notes }) => text(await buildContext(indexer, topic, max_notes ?? 4))
+    async ({ topic, max_notes }) => text((await tools.buildContext(topic, max_notes ?? 4)).text)
   );
 
   server.registerTool(
@@ -184,15 +129,7 @@ export async function startMcpServer(vault: Vault, opts: McpOptions): Promise<vo
         supersedes: z.string().optional().describe("^id or distinctive substring of the fact this replaces"),
       },
     },
-    async ({ fact, topic, supersedes }) => {
-      guardWrite();
-      const r = vault.rememberFact(fact, topic, supersedes);
-      indexer.indexNote(r.rel);
-      void indexer.embedPending();
-      return text(
-        `Recorded ^${r.id} in ${r.rel}${r.superseded ? ` (supersedes ^${r.superseded})` : ""}`
-      );
-    }
+    async ({ fact, topic, supersedes }) => text(tools.remember(fact, topic, supersedes).text)
   );
 
   server.registerTool(
@@ -206,18 +143,7 @@ export async function startMcpServer(vault: Vault, opts: McpOptions): Promise<vo
       },
       annotations: { readOnlyHint: true },
     },
-    async ({ days, limit }) => {
-      const cutoff = Date.now() - (days ?? 7) * 86400_000;
-      const rows = indexer.db
-        .prepare("SELECT path, title, mtime FROM notes WHERE mtime > ? ORDER BY mtime DESC LIMIT ?")
-        .all(cutoff, limit ?? 20) as { path: string; title: string; mtime: number }[];
-      if (!rows.length) return text("No notes modified in that window.");
-      return text(
-        rows
-          .map((r) => `${new Date(r.mtime).toISOString().slice(0, 16)}  ${r.path} — ${r.title}`)
-          .join("\n")
-      );
-    }
+    async ({ days, limit }) => text(tools.recentActivity(days ?? 7, limit ?? 20).text)
   );
 
   server.registerTool(
@@ -231,15 +157,7 @@ export async function startMcpServer(vault: Vault, opts: McpOptions): Promise<vo
       },
       annotations: { readOnlyHint: true },
     },
-    async ({ folder, limit }) => {
-      let paths = vault.listNoteFiles();
-      if (folder) {
-        const prefix = folder.replace(/\/+$/, "") + "/";
-        paths = paths.filter((p) => p.startsWith(prefix));
-      }
-      paths = paths.slice(0, limit ?? 200);
-      return text(paths.length ? paths.join("\n") : "No notes found.");
-    }
+    async ({ folder, limit }) => text(tools.listNotes(folder, limit ?? 200).text)
   );
 
   const transport = new StdioServerTransport();

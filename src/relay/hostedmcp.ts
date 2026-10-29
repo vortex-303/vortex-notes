@@ -319,7 +319,7 @@ export function createHostedMcp(deps: HostedDeps) {
         return ok({
           protocolVersion: PROTOCOLS.includes(asked) ? asked : PROTOCOLS[PROTOCOLS.length - 1],
           capabilities: { tools: { listChanged: false } },
-          serverInfo: { name: "vortex-notes", title: "Vortex Notes", version: "0.1.8" },
+          serverInfo: { name: "vortex-notes", title: "Vortex Notes", version: "0.1.9" },
           instructions: INSTRUCTIONS,
         });
       }

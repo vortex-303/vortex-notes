@@ -7,6 +7,7 @@ import { isLockedContent, lockContent, unlockContent, unlockContentWithAccount }
 import { accountFromPhrase } from "./account.js";
 import { fromHex } from "./crypto.js";
 import { startMcpServer } from "./mcp.js";
+import { AGENT_HELP } from "./agentcli.js";
 import { startWebServer } from "./server.js";
 import { initIdentity, loginIdentity, loadIdentity, hasIdentity, vortexHome } from "./identity.js";
 import { createSpace, listSpaces, getSpace, openSpaceKey, encryptDoc, decryptDoc } from "./spaces.js";
@@ -28,8 +29,6 @@ Usage:
   vortex-notes serve [--vault <dir>] [--port <n>]
                                                Local web viewer (default http://127.0.0.1:7303)
   vortex-notes index [--vault <dir>]           (Re)build the search index
-  vortex-notes search <query> [--vault <dir>] [--keyword]
-                                               Search from the terminal
   vortex-notes unlock <note.md> [--vault <dir>] [--phrase]
                                                Read a password-protected note (password, or
                                                --phrase to use your 12 words)
@@ -64,8 +63,17 @@ Usage:
   vortex-notes sync status [--vault <dir>]      Show link + cursor
   vortex-notes sync move --relay <url>          Point at a relay that already has your space (migration)
 
+${AGENT_HELP}
+
 Vault resolution: --vault flag > VORTEX_NOTES_VAULT env > cwd if it has .vortex > ~/VortexNotes
+  (agent commands and mcp then fall back to this machine's one paired vault)
 Set VORTEX_NOTES_NO_SEMANTIC=1 to disable embeddings (keyword search only).`;
+
+const VALUE_FLAGS = new Set([
+  "vault", "port", "name", "db", "relay", "space",
+  // agent commands (src/agentcli.ts)
+  "folder", "tags", "content", "date", "topic", "supersedes", "find", "replace", "append", "prepend", "days", "limit", "max",
+]);
 
 interface Args {
   command?: string;
@@ -84,7 +92,7 @@ function parseArgs(argv: string[]): Args {
     const a = argv[i];
     if (a.startsWith("--")) {
       const key = a.slice(2);
-      if (["vault", "port", "name", "db", "relay", "space"].includes(key)) args.flags.set(key, argv[++i]);
+      if (VALUE_FLAGS.has(key) && i + 1 < argv.length) args.flags.set(key, argv[++i]);
       else args.flags.set(key, true);
     } else {
       args.positional.push(a);
@@ -100,6 +108,9 @@ async function main(): Promise<void> {
     return;
   }
   const vault = Vault.resolve(args.flags.get("vault") as string | undefined);
+
+  const { isAgentCommand, runAgentCommand } = await import("./agentcli.js");
+  if (isAgentCommand(args.command)) return runAgentCommand(args.command, args, vault);
 
   switch (args.command) {
     case "setup": {
@@ -172,21 +183,6 @@ async function main(): Promise<void> {
       indexer.close();
       break;
     }
-    case "search": {
-      requireVault(vault);
-      const query = args.positional.join(" ").trim();
-      if (!query) fail("Usage: vortex-notes search <query>");
-      const indexer = new Indexer(vault);
-      await indexer.indexAll();
-      const results = await search(indexer, query, 8, args.flags.has("keyword") ? "keyword" : "hybrid");
-      if (!results.length) console.log("No results.");
-      for (const r of results) {
-        console.log(`\n\x1b[1m${r.path}\x1b[0m${r.heading ? ` › ${r.heading}` : ""}  (${r.score})`);
-        console.log(r.snippet.replace(/\n/g, " ").slice(0, 200));
-      }
-      indexer.close();
-      break;
-    }
     case "unlock": {
       requireVault(vault);
       const rel = args.positional[0];
@@ -240,16 +236,9 @@ async function main(): Promise<void> {
       break;
     }
     case "mcp": {
-      let target = vault;
-      if (!args.flags.get("vault") && !process.env.VORTEX_NOTES_VAULT && !vault.exists()) {
-        const { findSoleAgentVault } = await import("./agents.js");
-        const sole = findSoleAgentVault();
-        if (sole) {
-          process.env.VORTEX_NOTES_HOME = sole.home;
-          target = new Vault(sole.vault);
-          console.error(`[vortex-notes] serving paired agent vault: ${sole.vault}`);
-        }
-      }
+      const { resolveToolVault } = await import("./agentcli.js");
+      const target = await resolveToolVault(vault, args.flags.has("vault"));
+      if (target !== vault) console.error(`[vortex-notes] serving paired agent vault: ${target.root}`);
       await startMcpServer(target, {
         readOnly: args.flags.has("read-only") || process.env.VORTEX_NOTES_READONLY === "1",
         watch: !args.flags.has("no-watch"),

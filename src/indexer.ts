@@ -89,7 +89,7 @@ export class Indexer {
   }
 
   /** Sync the index with the vault. Returns number of notes (re)indexed. */
-  async indexAll(): Promise<{ indexed: number; removed: number; total: number }> {
+  async indexAll(opts: { embed?: boolean } = {}): Promise<{ indexed: number; removed: number; total: number }> {
     const onDisk = this.vault.listNoteFiles();
     const onDiskSet = new Set(onDisk);
     const known = this.db.prepare("SELECT path, mtime, size FROM notes").all() as {
@@ -116,7 +116,7 @@ export class Indexer {
       indexed++;
     }
 
-    await this.embedPending();
+    if (opts.embed !== false) await this.embedPending();
     return { indexed, removed, total: onDisk.length };
   }
 
