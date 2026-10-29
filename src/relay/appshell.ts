@@ -324,10 +324,12 @@ export function appShell(_nonce: string): string {
     #pwOverlay { align-items:flex-end; padding:0; }
     #pwModal { border-radius:16px 16px 0 0; max-width:none; padding-bottom:calc(1.25rem + env(safe-area-inset-bottom)); }
   }
-  #pairOverlay, #chatOverlay { position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:50;
+  #pairOverlay, #chatOverlay, #oauthOverlay { position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:50;
     display:flex; align-items:center; justify-content:center; padding:1rem; }
   #chatOverlay { z-index:58; }
-  #pairOverlay[hidden], #chatOverlay[hidden] { display:none; }
+  #oauthOverlay { z-index:60; }
+  #pairOverlay[hidden], #chatOverlay[hidden], #oauthOverlay[hidden] { display:none; }
+  .oauthhost { font:0.8rem var(--mono); color:var(--ink-soft); }
   .agentbtns { display:flex; flex-wrap:wrap; gap:0.5rem; margin-top:0.8rem; }
   .pairgo.alt { background:var(--accent-soft); color:var(--accent); }
   [data-theme="dark"] .pairgo.alt { color:var(--accent); }
@@ -339,7 +341,7 @@ export function appShell(_nonce: string): string {
   .chaturlrow { display:flex; gap:0.5rem; align-items:center; }
   .chaturl { flex:1; min-width:0; overflow-wrap:anywhere; font:0.75rem var(--mono); background:var(--code-bg);
     padding:0.5rem 0.6rem; border-radius:8px; }
-  #pairModal, #chatModal { background:var(--surface); border:1px solid var(--line); border-radius:14px;
+  #pairModal, #chatModal, #oauthModal { background:var(--surface); border:1px solid var(--line); border-radius:14px;
     max-width:26rem; width:100%; padding:1.1rem 1.25rem 1.25rem; box-shadow:0 18px 50px rgba(0,0,0,0.3); }
   .pairinput { width:100%; padding:0.7rem 0.9rem; border:1px solid var(--line); border-radius:8px;
     background:var(--ground); color:var(--ink); font:600 1.1rem var(--mono); letter-spacing:0.25em;
@@ -348,7 +350,7 @@ export function appShell(_nonce: string): string {
   .pairgo { background:var(--accent); color:#fff; border:none; border-radius:8px;
     padding:0.55rem 1.2rem; font:600 0.85rem var(--sans); cursor:pointer; }
   [data-theme="dark"] .pairgo { color:#10211C; }
-  #pairModal .confirmrow, #chatModal .confirmrow { margin:0.4rem 0; }
+  #pairModal .confirmrow, #chatModal .confirmrow, #oauthModal .confirmrow { margin:0.4rem 0; }
   @media (max-width:720px) {
     #pairOverlay, #chatOverlay { align-items:flex-end; padding:0; }
     #pairModal, #chatModal { border-radius:16px 16px 0 0; max-width:none;
@@ -533,6 +535,18 @@ export function appShell(_nonce: string): string {
       <strong>Others</strong>: anywhere that asks for a remote / Streamable HTTP MCP server URL.</p>
     </div>
     <div id="chatStatus" class="tipsfoot"></div>
+  </div>
+</div>
+<div id="oauthOverlay" hidden>
+  <div id="oauthModal" role="dialog" aria-label="Approve a chat app">
+    <div class="tipshead"><strong><span id="oauthApp">An app</span> wants access to your notes</strong></div>
+    <p class="tipsintro">It will be able to search and read the notes in this space<span id="oauthWrites">, and write new ones</span>.
+    After you approve, you go back to <span class="oauthhost" id="oauthHost"></span>.</p>
+    <label class="confirmrow"><input type="radio" name="oauthMode" value="rw" checked> Read + write</label>
+    <label class="confirmrow"><input type="radio" name="oauthMode" value="ro"> Read-only</label>
+    <p class="chatwarn">Chat apps can only reach a server, so <strong>this relay holds this app's key and can read the notes it can access</strong>, and so does the app. Your other devices and agents stay end-to-end encrypted. Revoke it anytime under Agents &amp; devices.</p>
+    <div class="agentbtns"><button id="oauthApprove" class="pairgo">Approve</button><button id="oauthCancel" class="pairgo alt">Cancel</button></div>
+    <div id="oauthStatus" class="tipsfoot"></div>
   </div>
 </div>
 <div id="adminOverlay" hidden>

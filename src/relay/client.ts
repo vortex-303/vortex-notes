@@ -136,6 +136,12 @@ export class RelayClient {
     return (await res.json()) as { token: string; path: string };
   }
 
+  /** After the user approves a chat app's sign-in: bind the new connector to that request. */
+  async approveOAuth(request: string, connector: string): Promise<{ redirect: string }> {
+    const res = await ok(await this.signed("POST", "/v1/oauth/approve", { request, connector }));
+    return (await res.json()) as { redirect: string };
+  }
+
   async listConnectors(): Promise<{ token: string; agentSignPub: string; createdAt: string; lastUsedAt: string | null }[]> {
     const res = await ok(await this.signed("GET", "/v1/connectors"));
     return ((await res.json()) as { connectors: { token: string; agentSignPub: string; createdAt: string; lastUsedAt: string | null }[] }).connectors;

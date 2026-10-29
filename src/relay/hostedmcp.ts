@@ -82,6 +82,7 @@ const TOOLS: { name: string; title: string; description: string; inputSchema: Js
   {
     name: "write_note",
     title: "Create note",
+    annotations: { readOnlyHint: false, destructiveHint: false },
     description: "Create a new markdown note. Fails if the path already exists — use edit_note to modify existing notes.",
     inputSchema: {
       type: "object",
@@ -104,12 +105,13 @@ const TOOLS: { name: string; title: string; description: string; inputSchema: Js
       },
       required: ["path", "operation", "content"],
     },
-    annotations: { destructiveHint: true },
+    annotations: { readOnlyHint: false, destructiveHint: true },
     write: true,
   },
   {
     name: "append_daily",
     title: "Append to daily note",
+    annotations: { readOnlyHint: false, destructiveHint: false },
     description: "Append a timestamped entry to today's daily note (or a given date). The right place for observations and decisions.",
     inputSchema: { type: "object", properties: { content: str("Markdown for the entry (one bullet)"), date: str("YYYY-MM-DD (default: today)") }, required: ["content"] },
     write: true,
@@ -117,6 +119,7 @@ const TOOLS: { name: string; title: string; description: string; inputSchema: Js
   {
     name: "remember",
     title: "Remember a fact",
+    annotations: { readOnlyHint: false, destructiveHint: false },
     description:
       "Record a durable fact in memory/*.md as a dated bullet with a stable ^id. If it replaces an earlier fact, pass supersedes (the old ^id or a distinctive substring) — the old fact stays visible, struck through.",
     inputSchema: {
@@ -319,7 +322,7 @@ export function createHostedMcp(deps: HostedDeps) {
         return ok({
           protocolVersion: PROTOCOLS.includes(asked) ? asked : PROTOCOLS[PROTOCOLS.length - 1],
           capabilities: { tools: { listChanged: false } },
-          serverInfo: { name: "vortex-notes", title: "Vortex Notes", version: "0.1.10" },
+          serverInfo: { name: "vortex-notes", title: "Vortex Notes", version: "0.1.11" },
           instructions: INSTRUCTIONS,
         });
       }

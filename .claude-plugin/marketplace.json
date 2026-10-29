@@ -1,0 +1,15 @@
+{
+  "name": "vortex-notes",
+  "description": "Vortex Notes plugins for Claude: shared, end-to-end encrypted memory for you and your AI.",
+  "owner": {
+    "name": "vortex-303",
+    "url": "https://github.com/vortex-303"
+  },
+  "plugins": [
+    {
+      "name": "vortex-notes",
+      "source": "./plugins/vortex-notes",
+      "description": "Shared, end-to-end encrypted markdown memory for you and your AI."
+    }
+  ]
+}

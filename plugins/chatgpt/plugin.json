@@ -1,0 +1,54 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "vortex-notes",
+  "version": "0.1.0",
+  "description": "Shared, end-to-end encrypted markdown memory for you and your AI.",
+  "author": { "name": "vortex-303", "url": "https://github.com/vortex-303" },
+  "homepage": "https://vortex-notes.pages.dev",
+  "license": "MIT",
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Vortex Notes",
+        "shortDescription": "Your notes as shared AI memory",
+        "longDescription": "Vortex Notes is markdown notes that you and your AI tools share. Search your notes in any language, read a note, load everything about a topic in one step, add to today's daily note, remember facts (a new fact supersedes the old one instead of deleting it), and create or edit notes.\n\nYour notes are end-to-end encrypted and sync to your phone, browser and computer, where they're a plain folder of markdown. When you connect ChatGPT, you choose read + write or read-only, and you can revoke it any time in the app under Agents & devices. For chat connections the server holds that connection's key so it can answer, and can read the notes that connection may access. Everything else stays end-to-end encrypted.\n\nFree. Open source (MIT).",
+        "developerName": "vortex-303",
+        "category": "Productivity",
+        "capabilities": ["Search notes", "Read notes", "Remember facts", "Daily log", "Create and edit notes"],
+        "websiteURL": "https://vortex-notes.pages.dev",
+        "supportURL": "https://github.com/vortex-303/vortex-notes/issues",
+        "privacyPolicyURL": "https://vortex-notes.pages.dev/privacy",
+        "termsOfServiceURL": "https://vortex-notes.pages.dev/terms",
+        "defaultPrompt": [
+          "What do my notes say about the kiln build?",
+          "Remember that my test bike is blue.",
+          "Add to my daily note: shipped the landing page."
+        ],
+        "brandColor": "#14735C",
+        "logo": "./assets/logo.png",
+        "composerIcon": "./assets/icon.png"
+      },
+      "review": {
+        "test_cases": {
+          "positive": [
+            { "description": "Finds a fact in an existing note", "prompt": "Using Vortex Notes, what's the launch code in my Test note?", "tools_triggered": ["search_notes", "read_note"], "expected_behavior": "Searches the notes, reads Test.md and answers 4417, citing the note." },
+            { "description": "Records a durable fact", "prompt": "Remember that my test bike is blue.", "tools_triggered": ["remember"], "expected_behavior": "Adds a dated fact to memory/facts.md and confirms it was saved." },
+            { "description": "Adds to the daily note", "prompt": "Add to my daily note: reviewed the Vortex Notes app.", "tools_triggered": ["append_daily"], "expected_behavior": "Appends a timestamped bullet to today's daily note and confirms." },
+            { "description": "Loads context on a topic", "prompt": "Get me up to speed on my kiln project from my notes.", "tools_triggered": ["build_context"], "expected_behavior": "Returns a summary based on the kiln note and the clay note it links to." },
+            { "description": "Creates a new note", "prompt": "Create a note called Shopping list with milk, eggs and bread.", "tools_triggered": ["write_note"], "expected_behavior": "Creates shopping-list.md with the three items and confirms the path." }
+          ],
+          "negative": [
+            { "description": "Unrelated request should not use the notes tools", "prompt": "What's the capital of Portugal?" },
+            { "description": "No delete tool exists; it should explain it can't delete notes", "prompt": "Delete all of my notes." },
+            { "description": "General writing task with no reference to the user's notes", "prompt": "Write a haiku about autumn." }
+          ]
+        },
+        "demo_recording_url": "https://REPLACE-WITH-YOUR-VIDEO-LINK",
+        "commerce": false
+      },
+      "publication": {
+        "release_notes": "First release: search, read, build context, list, recent activity, create and edit notes, daily log and durable facts over OAuth."
+      }
+    }
+  }
+}

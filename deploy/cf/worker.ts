@@ -40,6 +40,7 @@ export class Relay extends DurableObject<Env> {
       quotaBytes: quotaMb > 0 ? quotaMb * 1e6 : undefined,
       adminAccount: env.RELAY_ADMIN_ACCOUNT || undefined,
       connectorKek: env.RELAY_CONNECTOR_KEK ? fromHex(env.RELAY_CONNECTOR_KEK) : undefined,
+      openaiAppsChallenge: env.OPENAI_APPS_CHALLENGE || undefined,
       broadcast: (spaceId, seq, exceptDevice) => {
         const msg = JSON.stringify({ type: "changed", space: spaceId, seq });
         for (const ws of ctx.getWebSockets()) {

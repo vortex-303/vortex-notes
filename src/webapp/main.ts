@@ -200,6 +200,7 @@ async function enterApp(): Promise<void> {
   paintUserIdentity();
   void probeAdmin();
   startLiveSync();
+  void maybeOAuthConsent().catch(() => undefined);
   // Poll stays as a safety net (proxies/sleep can drop the socket) — slow now
   // that the WebSocket carries instant updates.
   pollTimer = window.setInterval(() => void refresh().catch(() => undefined), 60_000);
@@ -1279,6 +1280,57 @@ async function grantAgent(signPub: Uint8Array, encPub: Uint8Array, name: string,
   return cert;
 }
 
+/** A cloud agent whose key the relay holds: the hosted MCP connector behind a chat app. */
+async function createChatConnector(name: string, mode: "ro" | "rw"): Promise<{ token: string; path: string }> {
+  const sign = randomSignKeypair();
+  const box = randomBoxKeypair();
+  const cert = await grantAgent(sign.pub, box.pub, name, mode);
+  const keys = new Uint8Array(64);
+  keys.set(sign.priv, 0);
+  keys.set(box.priv, 32);
+  return client!.createConnector(cert.signPub, keys);
+}
+
+// --- a chat app signing in over OAuth (/oauth/authorize sends the browser to /app?oauth=<id>) ---
+const oauthOverlay = $("#oauthOverlay");
+async function maybeOAuthConsent(): Promise<void> {
+  const id = new URLSearchParams(location.search).get("oauth");
+  if (!id || !/^[0-9a-f]{32}$/.test(id)) return;
+  history.replaceState(null, "", "/app"); // a reload shouldn't re-prompt
+  const res = await fetch(`/v1/oauth/request/${id}`);
+  const info = (await res.json().catch(() => ({}))) as { clientName?: string; redirectHost?: string; denyUrl?: string; error?: string };
+  oauthOverlay.hidden = false;
+  if (!res.ok || !info.clientName) {
+    $("#oauthApp").textContent = "A chat app";
+    $("#oauthStatus").textContent = info.error ?? "This sign-in request expired. Start again from the app.";
+    ($("#oauthApprove") as HTMLButtonElement).disabled = true;
+    $("#oauthCancel").onclick = () => (oauthOverlay.hidden = true);
+    return;
+  }
+  $("#oauthApp").textContent = info.clientName;
+  $("#oauthHost").textContent = info.redirectHost ?? "";
+  const syncWrites = () => {
+    const ro = (document.querySelector('input[name="oauthMode"]:checked') as HTMLInputElement).value === "ro";
+    $("#oauthWrites").hidden = ro;
+  };
+  document.querySelectorAll('input[name="oauthMode"]').forEach((r) => r.addEventListener("change", syncWrites));
+  $("#oauthCancel").onclick = () => location.assign(info.denyUrl!);
+  $("#oauthApprove").onclick = () => {
+    const mode = (document.querySelector('input[name="oauthMode"]:checked') as HTMLInputElement).value as "ro" | "rw";
+    ($("#oauthApprove") as HTMLButtonElement).disabled = true;
+    $("#oauthStatus").textContent = "Connecting…";
+    void (async () => {
+      const { token } = await createChatConnector(info.clientName!, mode);
+      const { redirect } = await client!.approveOAuth(id, token);
+      $("#oauthStatus").textContent = `Connected. Returning to ${info.redirectHost}…`;
+      location.assign(redirect);
+    })().catch((e) => {
+      ($("#oauthApprove") as HTMLButtonElement).disabled = false;
+      $("#oauthStatus").textContent = (e as Error).message;
+    });
+  };
+}
+
 // --- connect a chat app: a cloud agent whose key the relay holds (hosted MCP URL) ---
 const chatOverlay = $("#chatOverlay");
 $("#chatBtn").addEventListener("click", () => {
@@ -1300,13 +1352,7 @@ $("#chatCreate").addEventListener("click", () => {
   const mode = (document.querySelector('input[name="chatMode"]:checked') as HTMLInputElement).value as "ro" | "rw";
   $("#chatStatus").textContent = "Creating…";
   void (async () => {
-    const sign = randomSignKeypair();
-    const box = randomBoxKeypair();
-    const cert = await grantAgent(sign.pub, box.pub, name, mode);
-    const keys = new Uint8Array(64);
-    keys.set(sign.priv, 0);
-    keys.set(box.priv, 32);
-    const { path } = await client!.createConnector(cert.signPub, keys);
+    const { path } = await createChatConnector(name, mode);
     $("#chatUrl").textContent = location.origin + path;
     $("#chatStep1").hidden = true;
     $("#chatStep2").hidden = false;

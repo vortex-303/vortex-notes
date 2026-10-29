@@ -21,6 +21,8 @@ export interface RelayOptions {
   adminAccount?: string;
   /** 32-byte key encrypting hosted-MCP cloud-agent keys at rest */
   connectorKek?: Uint8Array;
+  /** served at /.well-known/openai-apps-challenge (ChatGPT app directory domain check) */
+  openaiAppsChallenge?: string;
 }
 
 /** better-sqlite3 binds Buffers, not bare Uint8Arrays. */
@@ -94,6 +96,7 @@ export async function startRelay(
     quotaBytes: opts.quotaBytes,
     adminAccount: opts.adminAccount,
     connectorKek: opts.connectorKek,
+    openaiAppsChallenge: opts.openaiAppsChallenge,
     broadcast: (spaceId, seq, exceptDevice) => broadcastChange(spaceId, seq, exceptDevice),
   });
 

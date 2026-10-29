@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "vortex-notes": {
+      "type": "http",
+      "url": "https://vortex-notes.pages.dev/mcp"
+    }
+  }
+}

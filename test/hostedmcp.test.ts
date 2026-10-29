@@ -141,22 +141,142 @@ test("hosted MCP: the relay refuses keys that don't belong to the agent", async 
   }
 });
 
-// ChatGPT/Claude probe OAuth discovery before connecting; a 401 there makes them
-// insist on OAuth. These connectors use the secret URL instead, so: plain 404.
-test("hosted MCP: OAuth discovery paths say 'no OAuth here' (404, not 401)", async () => {
+// Secret-URL connectors need no OAuth; probes other than our own discovery
+// documents get a plain 404 (a 401 there makes clients insist on signing in).
+test("hosted MCP: other discovery probes are a plain 404, not 401", async () => {
   const relay = await startRelay({ port: 0 });
   const base = `http://127.0.0.1:${relay.port}`;
   try {
     for (const p of [
-      "/.well-known/oauth-protected-resource",
-      "/.well-known/oauth-authorization-server",
       "/.well-known/openid-configuration",
-      `/.well-known/oauth-protected-resource/mcp/${"a".repeat(64)}`,
       `/mcp/${"a".repeat(64)}/.well-known/oauth-protected-resource`,
     ]) {
       assert.equal((await fetch(base + p)).status, 404, p);
     }
   } finally {
     await relay.close();
+  }
+});
+
+// OAuth sign-in on the one shared /mcp URL: what Claude/ChatGPT do when you add
+// https://…/mcp with "Sign in". Approval is the web app binding a connector.
+test("OAuth: register → authorize → approve → token → /mcp; PKCE, single-use codes, rotation, revoke", async () => {
+  const { createHash, randomBytes } = await import("node:crypto");
+  const relay = await startRelay({ port: 0, connectorKek: randomKey() });
+  const base = `http://127.0.0.1:${relay.port}`;
+  const prevHome = process.env.VORTEX_NOTES_HOME;
+  process.env.VORTEX_NOTES_HOME = fs.mkdtempSync(path.join(os.tmpdir(), "vortex-oauth-home-"));
+  const b64url = (b: Buffer) => b.toString("base64url");
+  const form = (o: Record<string, string>) => ({ method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams(o).toString() });
+  try {
+    initIdentity("owners-mac");
+    const vault = new Vault(fs.mkdtempSync(path.join(os.tmpdir(), "vortex-oauth-vault-")));
+    vault.init();
+    vault.writeNote("secret.md", "Secret", "launch code is 4417");
+    await linkVault(vault, base, "personal");
+    await syncVault(vault);
+    const spaceId = loadSyncState(vault)!.spaceId;
+
+    // discovery
+    const prm = await (await fetch(`${base}/.well-known/oauth-protected-resource`)).json() as any;
+    assert.equal(prm.resource, `${base}/mcp`);
+    const asm = await (await fetch(`${base}/.well-known/oauth-authorization-server`)).json() as any;
+    assert.deepEqual(asm.code_challenge_methods_supported, ["S256"]);
+    const noAuth = await fetch(`${base}/mcp`, { method: "POST", body: "{}" });
+    assert.equal(noAuth.status, 401);
+    assert.match(noAuth.headers.get("www-authenticate") ?? "", /resource_metadata="[^"]+oauth-protected-resource"/);
+
+    // registration: https or loopback only
+    assert.equal((await fetch(`${base}/oauth/register`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ redirect_uris: ["http://evil.example/cb"] }) })).status, 400);
+    const redirect = "https://claude.ai/api/mcp/auth_callback";
+    const reg = await (await fetch(`${base}/oauth/register`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ client_name: "Claude", redirect_uris: [redirect] }) })).json() as any;
+    const clientId = reg.client_id as string;
+
+    // a wrong redirect never bounces anywhere
+    const wrong = await fetch(`${base}/oauth/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent("https://evil.example/cb")}&code_challenge=x&code_challenge_method=S256`, { redirect: "manual" });
+    assert.equal(wrong.status, 400);
+
+    /** One full browser round: authorize → (user approves in the app) → code. */
+    const signIn = async (verifier: string) => {
+      const challenge = b64url(createHash("sha256").update(verifier).digest());
+      const auth = await fetch(`${base}/oauth/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirect)}&code_challenge=${challenge}&code_challenge_method=S256&state=xyz`, { redirect: "manual" });
+      assert.equal(auth.status, 302);
+      const reqId = new URL(auth.headers.get("location")!, base).searchParams.get("oauth")!;
+      const info = await (await fetch(`${base}/v1/oauth/request/${reqId}`)).json() as any;
+      assert.equal(info.clientName, "Claude");
+      assert.equal(info.redirectHost, "claude.ai");
+      const { url, signPub, client } = await createCloudAgent(base, spaceId, "rw");
+      const { redirect: back } = await client.approveOAuth(reqId, url.split("/mcp/")[1]);
+      const u = new URL(back);
+      assert.equal(u.origin + u.pathname, redirect);
+      assert.equal(u.searchParams.get("state"), "xyz");
+      return { code: u.searchParams.get("code")!, signPub, client };
+    };
+
+    // wrong PKCE verifier fails, and burns the code
+    const v1 = b64url(randomBytes(32));
+    const first = await signIn(v1);
+    const badPkce = await fetch(`${base}/oauth/token`, form({ grant_type: "authorization_code", code: first.code, redirect_uri: redirect, client_id: clientId, code_verifier: b64url(randomBytes(32)) }));
+    assert.equal(badPkce.status, 400);
+    const burnt = await fetch(`${base}/oauth/token`, form({ grant_type: "authorization_code", code: first.code, redirect_uri: redirect, client_id: clientId, code_verifier: v1 }));
+    assert.equal((await burnt.json() as any).error, "invalid_grant");
+
+    // the real thing
+    const v2 = b64url(randomBytes(32));
+    const second = await signIn(v2);
+    const tok = await (await fetch(`${base}/oauth/token`, form({ grant_type: "authorization_code", code: second.code, redirect_uri: redirect, client_id: clientId, code_verifier: v2 }))).json() as any;
+    assert.equal(tok.token_type, "Bearer");
+    const reused = await fetch(`${base}/oauth/token`, form({ grant_type: "authorization_code", code: second.code, redirect_uri: redirect, client_id: clientId, code_verifier: v2 }));
+    assert.equal(reused.status, 400, "codes are single-use");
+
+    const callMcp = async (access: string, method: string, params: unknown = {}) => {
+      const r = await fetch(`${base}/mcp`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${access}` }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) });
+      return { status: r.status, body: (await r.json().catch(() => null)) as any };
+    };
+    const read = await callMcp(tok.access_token, "tools/call", { name: "read_note", arguments: { path: "secret.md" } });
+    assert.equal(read.status, 200);
+    assert.match(toolText(read), /4417/);
+    assert.equal((await callMcp("f".repeat(64), "tools/list")).status, 401);
+
+    // refresh rotates: the old refresh token stops working
+    const refreshed = await (await fetch(`${base}/oauth/token`, form({ grant_type: "refresh_token", refresh_token: tok.refresh_token, client_id: clientId }))).json() as any;
+    assert.ok(refreshed.access_token && refreshed.refresh_token !== tok.refresh_token);
+    assert.equal((await fetch(`${base}/oauth/token`, form({ grant_type: "refresh_token", refresh_token: tok.refresh_token, client_id: clientId }))).status, 400);
+    assert.equal((await callMcp(refreshed.access_token, "tools/list")).status, 200);
+
+    // revoke in Agents & devices → tokens dead, refresh refused
+    await second.client.revokePrincipal(second.signPub);
+    assert.equal((await callMcp(refreshed.access_token, "tools/list")).status, 401);
+    assert.equal((await fetch(`${base}/oauth/token`, form({ grant_type: "refresh_token", refresh_token: refreshed.refresh_token, client_id: clientId }))).status, 400);
+  } finally {
+    process.env.VORTEX_NOTES_HOME = prevHome;
+    await relay.close();
+  }
+});
+
+// Directory listings link these; the ChatGPT domain check needs its token served verbatim.
+test("relay serves /privacy, /terms and the optional OpenAI domain-check token", async () => {
+  const relay = await startRelay({ port: 0, openaiAppsChallenge: "tok-123" });
+  const base = `http://127.0.0.1:${relay.port}`;
+  try {
+    assert.match(await (await fetch(`${base}/privacy`)).text(), /chat connector/);
+    assert.match(await (await fetch(`${base}/terms`)).text(), /Terms of use/);
+    assert.equal(await (await fetch(`${base}/.well-known/openai-apps-challenge`)).text(), "tok-123");
+    const tools = await (await fetch(`${base}/privacy`)).headers.get("content-type");
+    assert.match(tools ?? "", /text\/html/);
+  } finally {
+    await relay.close();
+  }
+});
+
+test("every MCP tool has a title and a read-only or destructive hint (directory requirement)", async () => {
+  const { createHostedMcp } = await import("../src/relay/hostedmcp.js");
+  const h = createHostedMcp({ pull: () => [], push: () => 1 });
+  const out = h.rpc({ spaceId: "s", spaceKey: new Uint8Array(32), readOnly: false }, { jsonrpc: "2.0", id: 1, method: "tools/list" }) as any;
+  assert.equal(out.result.tools.length, 9);
+  for (const t of out.result.tools) {
+    assert.ok(t.title, `${t.name} has a title`);
+    assert.ok(typeof t.annotations?.readOnlyHint === "boolean" || typeof t.annotations?.destructiveHint === "boolean", `${t.name} has a hint`);
+    assert.ok(t.name.length <= 64);
   }
 });

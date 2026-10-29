@@ -26,6 +26,8 @@ import { appShell } from "./appshell.js";
 import { marked } from "marked";
 import { createHostedMcp } from "./hostedmcp.js";
 import { llmsTxt } from "./llmstxt.js";
+import { createOAuth, corsHeaders } from "./oauth.js";
+import { privacyPage, termsPage } from "./legal.js";
 
 export const MAX_BODY = 8 * 1024 * 1024;
 const MAX_SKEW_MS = 5 * 60 * 1000;
@@ -87,6 +89,8 @@ export interface RelayCoreOptions {
    * (hosted MCP connectors). Without it they're stored as-is (self-host).
    */
   connectorKek?: Uint8Array;
+  /** Token ChatGPT's app directory asks you to serve at /.well-known/openai-apps-challenge. */
+  openaiAppsChallenge?: string;
   /** Wake live subscribers of a space (WebSocket layer is per-platform). */
   broadcast?: (spaceId: string, seq: number, exceptDevice: string) => void;
 }
@@ -187,6 +191,7 @@ const asBytes = (b: unknown): Uint8Array => (b instanceof Uint8Array ? b : new U
 export function createRelayCore(opts: RelayCoreOptions): RelayCore {
   const db = opts.sql;
   migrate(db);
+  const oauth = createOAuth(db);
   const get = <T>(q: string, ...p: unknown[]): T | undefined => db.all<T>(q, ...p)[0];
   const quota = opts.quotaBytes && opts.quotaBytes > 0 ? opts.quotaBytes : null;
   const usageOf = (account: string): number =>
@@ -296,8 +301,16 @@ export function createRelayCore(opts: RelayCoreOptions): RelayCore {
     const route = `${req.method} ${url.pathname}`;
 
     if (route === "GET /health") return json(200, { ok: true });
-    // Connectors are keyed by their secret URL, not OAuth. Answer discovery probes
-    // (ChatGPT, Claude) with a plain 404 = "no OAuth here"; a 401 reads as "sign-in required".
+    if (route === "GET /privacy") return html(200, privacyPage(), { "Cache-Control": "public, max-age=3600" });
+    if (route === "GET /terms") return html(200, termsPage(), { "Cache-Control": "public, max-age=3600" });
+    if (route === "GET /.well-known/openai-apps-challenge" && opts.openaiAppsChallenge) {
+      return new Response(opts.openaiAppsChallenge, { headers: { "Content-Type": "text/plain; charset=utf-8" } });
+    }
+    // OAuth sign-in for the one shared /mcp URL (discovery, /oauth/*, consent lookup).
+    const oauthRes = oauth.route(req, url, body);
+    if (oauthRes) return oauthRes;
+    // Secret-URL connectors need no OAuth: other discovery probes get a plain 404
+    // (a 401 would read as "sign-in required").
     if (url.pathname.startsWith("/.well-known/") || /^\/mcp\/[^/]+\/\.well-known\//.test(url.pathname)) {
       return json(404, { error: "Not found" });
     }
@@ -386,7 +399,18 @@ export function createRelayCore(opts: RelayCoreOptions): RelayCore {
     }
 
     const mcpMatch = url.pathname.match(/^\/mcp\/([0-9a-f]{64})$/);
-    if (mcpMatch) return handleMcp(req, mcpMatch[1], body);
+    if (url.pathname === "/mcp" || mcpMatch) {
+      if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
+      let token = mcpMatch?.[1];
+      if (!token) {
+        const b = oauth.bearer(req, url);
+        if (b instanceof Response) return b;
+        token = b.connector;
+      }
+      const res = handleMcp(req, token, body);
+      for (const [k, v] of Object.entries(corsHeaders)) res.headers.set(k, v);
+      return res;
+    }
 
     if (route === "POST /v1/pair/request") {
       const b = parse(body);
@@ -552,6 +576,11 @@ export function createRelayCore(opts: RelayCoreOptions): RelayCore {
       );
       return json(200, { token, path: `/mcp/${token}` });
     }
+    if (route === "POST /v1/oauth/approve") {
+      if (isAgent) return json(403, { error: "Agents cannot approve sign-ins" });
+      const b = parse(body);
+      return oauth.approve(String(b.request ?? ""), String(b.connector ?? ""), account);
+    }
     if (route === "GET /v1/connectors") {
       if (isAgent) return json(403, { error: "Agents cannot list connectors" });
       return json(200, {
@@ -638,11 +667,15 @@ export function createRelayCore(opts: RelayCoreOptions): RelayCore {
     if (req.method === "DELETE" && principalMatch) {
       if (isAgent) return json(403, { error: "Agents cannot revoke principals" });
       const gone = db.all("DELETE FROM devices WHERE signPub=? AND account=? RETURNING signPub", principalMatch[1], account);
-      if (gone.length) db.run("DELETE FROM connectors WHERE agentSignPub=?", principalMatch[1]); // kills its MCP URL + held keys
+      if (gone.length) {
+        for (const c of db.all<{ token: string }>("SELECT token FROM connectors WHERE agentSignPub=?", principalMatch[1])) oauth.forgetConnector(c.token);
+        db.run("DELETE FROM connectors WHERE agentSignPub=?", principalMatch[1]); // kills its MCP URL + held keys + OAuth tokens
+      }
       return json(gone.length ? 200 : 404, gone.length ? { ok: true } : { error: "No such principal" });
     }
 
-    const rawMatch = url.pathname.match(/^\/v1\/spaces\/([a-z0-9-]+)(?:\/docs\/([A-Za-z0-9._%-]+))?$/);
+    // Doc ids arrive as one encodeURIComponent'd segment, which leaves !'()*~ bare.
+    const rawMatch = url.pathname.match(/^\/v1\/spaces\/([a-z0-9-]+)(?:\/docs\/([A-Za-z0-9._%!'()*~-]+))?$/);
     const spaceMatch = rawMatch
       ? ([rawMatch[0], rawMatch[1], rawMatch[2] ? decodeURIComponent(rawMatch[2]) : undefined] as const)
       : null;

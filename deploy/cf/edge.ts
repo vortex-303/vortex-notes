@@ -7,6 +7,8 @@ export interface Env {
   RELAY_ADMIN_ACCOUNT?: string;
   /** secret: 32-byte hex key encrypting cloud-agent keys at rest */
   RELAY_CONNECTOR_KEK?: string;
+  /** token for ChatGPT's app directory domain check (/.well-known/openai-apps-challenge) */
+  OPENAI_APPS_CHALLENGE?: string;
 }
 
 /** Forward a request to the single relay instance, with only the coarse country attached. */

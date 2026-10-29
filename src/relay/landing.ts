@@ -396,6 +396,7 @@ ${pickerHtml()}
 <p class="exception"><strong>The one exception is yours to make.</strong> A chat app (Claude, ChatGPT) can only
 reach a server, so when you create a connector this server holds that connector's key and can read the notes it
 may see. Everything else stays end-to-end encrypted.</p>
+<p class="fine">Details: <a href="/privacy">privacy policy</a> · <a href="/terms">terms of use</a>.</p>
 
 <span class="k">Self-host</span>
 <h2>Or run your own</h2>
@@ -408,6 +409,8 @@ Point any command at it with <code>--relay</code>. MIT licensed.</p>
   <a href="https://github.com/vortex-303/vortex-notes">GitHub</a> ·
   <a href="https://www.npmjs.com/package/vortex-notes">npm</a> ·
   <a href="/llms.txt">llms.txt</a> ·
+  <a href="/privacy">Privacy</a> ·
+  <a href="/terms">Terms</a> ·
   zero plaintext on this server unless you connect a chat app</footer>
 </div>
 <nav class="tabbar" aria-label="Sections">

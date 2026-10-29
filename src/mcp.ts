@@ -65,6 +65,7 @@ export async function startMcpServer(vault: Vault, opts: McpOptions): Promise<vo
     "write_note",
     {
       title: "Create note",
+      annotations: { readOnlyHint: false, destructiveHint: false },
       description:
         "Create a new markdown note. Fails if the path already exists — use edit_note to modify existing notes.",
       inputSchema: {
@@ -89,7 +90,7 @@ export async function startMcpServer(vault: Vault, opts: McpOptions): Promise<vo
         content: z.string().describe("Text to append/prepend, or replacement text for find_replace"),
         find: z.string().optional().describe("Exact string to find (find_replace only)"),
       },
-      annotations: { destructiveHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: true },
     },
     async ({ path: rel, operation, content, find }) => text(tools.editNote(rel, operation, content, find).text)
   );
@@ -98,6 +99,7 @@ export async function startMcpServer(vault: Vault, opts: McpOptions): Promise<vo
     "append_daily",
     {
       title: "Append to daily note",
+      annotations: { readOnlyHint: false, destructiveHint: false },
       description:
         "Append a timestamped entry to today's daily note (or a given date). The right place for observations, decisions, and things to remember.",
       inputSchema: {
@@ -127,6 +129,7 @@ export async function startMcpServer(vault: Vault, opts: McpOptions): Promise<vo
     "remember",
     {
       title: "Remember a fact",
+      annotations: { readOnlyHint: false, destructiveHint: false },
       description:
         "Record a durable fact in the shared memory (memory/*.md) as a dated bullet with a stable ^id. If it replaces an earlier fact, pass supersedes (the old fact's ^id, or a distinctive substring of it) — the old fact stays visible with strikethrough and a pointer to the new one. Use search_notes to find existing facts first.",
       inputSchema: {

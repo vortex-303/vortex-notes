@@ -1,0 +1,11 @@
+{
+  "name": "vortex-notes",
+  "displayName": "Vortex Notes",
+  "version": "0.1.0",
+  "description": "Shared, end-to-end encrypted markdown memory for you and your AI: search, read and write your Vortex Notes, keep a daily log, and remember facts across conversations.",
+  "author": { "name": "vortex-303", "url": "https://github.com/vortex-303" },
+  "homepage": "https://vortex-notes.pages.dev",
+  "repository": "https://github.com/vortex-303/vortex-notes",
+  "license": "MIT",
+  "keywords": ["notes", "memory", "markdown", "encrypted", "knowledge-base"]
+}
