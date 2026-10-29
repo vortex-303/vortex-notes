@@ -92,6 +92,8 @@ to the paired vault:
 - **Hermes**: type `/reload-mcp` afterwards
 - **OpenCode**: added to `~/.config/opencode/opencode.json`
 
+No MCP in your agent? The same tools work as shell commands, see
+[Agents without MCP](#agents-without-mcp-the-same-tools-as-commands).
 Works over SSH too (you approve from your phone). Any other stdio MCP client:
 `{ "command": "npx", "args": ["-y", "vortex-notes", "mcp"], "env": { "VORTEX_NOTES_VAULT": "<path pair printed>" } }`.
 Add `--read-only` to make it read-only.

@@ -25,7 +25,30 @@ src/tools.ts VaultTools, shared with mcp.ts). Pull before / push after write whe
 linked, --json, --offline, stdin via "-". Implicit default ~/VortexNotes yields to
 the sole paired vault (a stale Fly-era ~/VortexNotes exists on this Mac). Empty
 VORTEX_NOTES_VAULT = unset. OpenClaw skill rewritten around the commands.
-User must `npm publish` 0.1.9 (then `npm i -g vortex-notes@latest` — npx prefers the global).
+0.1.9 PUBLISHED 2026-10-29. Landing reworked (Connect your AI: chat apps first, then
+`npx -y vortex-notes@latest pair` — VERIFIED bare npx runs a stale global, @latest doesn't;
+honest 'unless you connect a chat app' promise/footer; phone tabs follow #hash links).
+Clean `npm i -g` works despite npm skipping install scripts (onnxruntime ships prebuilt
+binaries); first semantic search downloads ~120MB model (minutes), then ~0.8s.
+Known: harness entries from npx run `npx -y vortex-notes mcp` (bare) → a stale global would win.
+
+Client verification (2026-10-29): `scripts/verify-clients.sh` (PKG=local|npm, MODELS=1,
+RELAY=…) runs install → pair → Claude Code (`claude -p --mcp-config --strict-mcp-config`),
+OpenCode (project opencode.json), Hermes (`hermes mcp test` with temp HOME), stdio
+config, shell CLI, hosted connector via official MCP Inspector — against PROD with a
+throwaway account, real configs checksum-verified unchanged. 22/22 with MODELS=1.
+Found + fixed: MCP writes in short sessions never pushed (30s tick) → nudge-on-write +
+flush on exit (test/mcpsync.test.ts); hermes-private node → prefer system node.
+Cursor CLI not logged in here (config-level verified only). 0.1.10 built, NOT published.
+Manual still: real Claude.ai / ChatGPT connector check.
+
+Discovery level 1 (2026-10-29): server.json (validated, io.github.vortex-303/vortex-notes,
+npm stdio + `mcp` arg) + package.json mcpName + glama.json + /llms.txt (live, own origin).
+appcypher fork entry icon fixed → pages.dev. USER TODO: npm publish 0.1.10 → `mcp-publisher
+login github` (as vortex-303) + `mcp-publisher publish` from repo root; push main (glama.json)
+→ claim on glama.ai → reopen punkpeye#10313 (closed inactive 2026-09-07); click PR links for
+wong2 + appcypher (gh PR creation blocked by permission check). gh active account `soulzeek`
+fails login ("suspended") — use vortex-303. Level 2 next: OAuth for /mcp → Claude + ChatGPT directories.
 
 Open items / next:
 1. Verify MCP in a fresh Claude Code session (search/remember round-trip to web app).

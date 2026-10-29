@@ -23,6 +23,7 @@ export function landingShell(nonce: string): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="alternate" type="text/plain" title="Guide for AI assistants" href="/llms.txt">
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F8FAF8">
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#121715">
 <meta name="description" content="Plain-markdown notes you share with your AI agents — end-to-end encrypted sync, local semantic search, scoped agent access.">
@@ -145,12 +146,23 @@ export function landingShell(nonce: string): string {
     background:var(--accent-soft); border-radius:50%; width:1.5rem; height:1.5rem;
     display:flex; align-items:center; justify-content:center; margin-top:0.15rem; }
 
-  .agents { display:grid; gap:0.7rem; margin:1.2rem 0; }
+  .agents { display:grid; grid-template-columns:minmax(0, 1fr); gap:0.7rem; margin:1.2rem 0; }
   .agent { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:0.95rem 1.15rem; }
   .agent h4 { margin:0 0 0.15rem; font:650 0.95rem var(--sans); }
   .agent h4 span { font:500 0.68rem var(--mono); color:var(--ink-faint); margin-left:0.5rem; }
   .agent p { margin:0 0 0.5rem; font-size:0.85rem; color:var(--ink-soft); }
   .agent pre { margin:0; font-size:0.74rem; }
+  .agent ol { margin:0.35rem 0 0.5rem; padding-left:1.2rem; font-size:0.85rem; color:var(--ink-soft); }
+  .agent li { margin:0.25rem 0; }
+  .agent .codewrap { margin:0.4rem 0 0.6rem; }
+  .getstep { background:var(--accent-soft); border-radius:12px; padding:0.9rem 1.15rem; font-size:0.88rem;
+    color:var(--ink-soft); line-height:1.55; margin:0.8rem 0 0.2rem; }
+  .getstep b { color:var(--ink); }
+  .getstep a, .agent a { color:var(--accent); }
+  .agent, .getstep { min-width:0; }
+  .agent code, .getstep code { overflow-wrap:anywhere; }
+  .agent pre, .getstep pre { overflow-x:auto; padding-right:4.2rem; }
+  .getstep .codewrap { margin:0.6rem 0; }
   .agent .codewrap { max-width:none; }
   .agent .copy { top:0.45rem; }
   .agent a { color:var(--accent); }
@@ -266,26 +278,47 @@ do each step individually, including pointing at a self-hosted relay.</p>
 <h2>Agents are principals, not passengers</h2>
 <p>Every AI you connect gets <strong>its own key</strong>, certified by yours, scoped to the spaces you
 grant, read-only if you say so. Every edit it makes is signed as that agent, and revoking one takes a
-tap in <em>Agents &amp; devices</em>. Pick how your AI reaches your notes:</p>
+tap in <em>Agents &amp; devices</em>.</p>
 
+<h3>Chat apps — nothing to install</h3>
+<div class="getstep">
+  <b>First, get your connector URL</b> in <a href="/app">the app</a>:
+  user menu (bottom left) → <em>Agents &amp; devices</em> → <em>Connect a chat app</em> → name it
+  (e.g. “Claude”), pick read + write or read-only → <em>Create connector</em> → <em>Copy</em>.
+  It looks like <code>https://vortex-notes.pages.dev/mcp/3f9a…</code> — treat it like a password,
+  and make one per app so you can revoke each on its own.
+</div>
 <div class="agents">
-  <div class="agent"><h4>Claude.ai · ChatGPT <span>no install</span></h4>
-    <p>In the app: <em>Agents &amp; devices</em> → <em>Connect a chat app</em> → copy the URL.</p>
-    <p><strong>Claude</strong>: Settings → Connectors → Add custom connector → paste.
-    <strong>ChatGPT</strong>: Settings → Apps &amp; Connectors → Advanced → Developer mode → Create → paste.</p>
-    <p class="fine">Chat apps can only reach a server, so this server holds that connector's key and can
-    read the notes it's allowed to see — the chat app sees them too. Your other devices and agents stay
-    end-to-end encrypted.</p>
+  <div class="agent"><h4>Claude <span>web · desktop · mobile</span></h4>
+    <ol>
+      <li>On claude.ai: <em>Settings</em> → <em>Connectors</em> → <em>Add custom connector</em>.</li>
+      <li>Name: <code>Vortex Notes</code>. URL: paste your connector URL → <em>Add</em>.</li>
+      <li>In a chat, turn it on from the tools menu, then ask: “search my notes for …” or “remember that …”.</li>
+    </ol>
+    <p class="fine">Added once, it's there in Claude on the web, the desktop app and your phone.</p>
   </div>
-  <div class="agent"><h4>Claude Code · Hermes · OpenCode <span>on your computer</span></h4>
-    <p>One command on the machine the agent runs on (Node 20+), then approve the code in the app:</p>
-    <div class="codewrap"><pre>npx -y vortex-notes@latest pair</pre><button class="copy">copy</button></div>
-    <p class="fine">Keys are generated on that machine and never leave it — fully end-to-end encrypted.</p>
+  <div class="agent"><h4>ChatGPT <span>developer mode</span></h4>
+    <ol>
+      <li><em>Settings</em> → <em>Apps &amp; Connectors</em> → <em>Advanced settings</em> → turn on <em>Developer mode</em>.</li>
+      <li>Back in <em>Apps &amp; Connectors</em> → <em>Create</em>. Name: <code>Vortex Notes</code>. MCP server URL:
+        your connector URL. Authentication: <em>No authentication</em> → confirm → <em>Create</em>.</li>
+      <li>In a chat: <em>+</em> → <em>Developer mode</em> → enable Vortex Notes, then ask away.</li>
+    </ol>
+    <p class="fine">Developer mode is available on ChatGPT's paid plans.</p>
   </div>
 </div>
+<p class="note">How this differs: chat apps can only reach a server, so this server holds that
+connector's key and can read the notes it's allowed to see — and the chat app sees them too. Everything
+below, and all your other devices, stay end-to-end encrypted.</p>
 
-<h3>How pairing works</h3>
-    <img class="demo" src="/demo.svg" alt="install, cross-lingual search, pair an agent" width="740">
+<h3>On your computer — pair once</h3>
+<div class="getstep">
+  <b>Run one command where the agent runs</b> (Node 20+; over SSH is fine), then approve the 6-letter
+  code in the app: user menu → <em>Agents &amp; devices</em> → <em>Pair an agent</em>.
+  <div class="codewrap"><pre>npx -y vortex-notes@latest pair</pre><button class="copy">copy</button></div>
+  The code is single-use and expires in 15 minutes. Keys are generated on that machine and never leave
+  it. Pairing syncs your notes and wires up every app below that it finds.
+</div>
 <div class="pairviz">
   <span class="box"><b>agent machine</b>shows <span class="code">KM3PXR</span></span>
   <span class="arrow">→</span>
@@ -293,39 +326,40 @@ tap in <em>Agents &amp; devices</em>. Pick how your AI reaches your notes:</p>
   <span class="arrow">→</span>
   <span class="box"><b>done</b>agent syncs — scoped &amp; signed</span>
 </div>
-<p class="note">The code is single-use and expires in 15 minutes. When pairing completes, the
-command wires up every harness it finds on that machine:</p>
-
 <div class="agents">
-  <div class="agent"><h4>Claude Code <span>MCP · pairing</span></h4>
-    <p>Added for <em>every</em> project once you approve — restart any open session.</p>
+  <div class="agent"><h4>Claude Code <span>set up automatically</span></h4>
+    <p>Added for <em>every</em> project. Restart Claude Code, check with <code>/mcp</code>
+    (vortex-notes should show connected), then ask: “what do my notes say about …”.</p>
   </div>
-  <div class="agent"><h4>Hermes <span>MCP · pairing</span></h4>
-    <p>Same command on the Hermes machine (SSH is fine — you approve from your phone), then type
-    <code>/reload-mcp</code> in your Hermes chat.</p>
+  <div class="agent"><h4>Hermes <span>set up automatically</span></h4>
+    <p>Pair on the Hermes machine, then type <code>/reload-mcp</code> in your Hermes chat.</p>
   </div>
-  <div class="agent"><h4>OpenCode <span>MCP · pairing</span></h4>
-    <p>Same command — it adds the server to <code>~/.config/opencode/opencode.json</code>.
-    Restart OpenCode.</p>
+  <div class="agent"><h4>OpenCode <span>set up automatically</span></h4>
+    <p>Added to <code>~/.config/opencode/opencode.json</code>. Restart OpenCode.</p>
   </div>
-  <div class="agent"><h4>OpenClaw <span>skill · files</span></h4>
-    <p>OpenClaw is filesystem-native: sync a vault on its machine (pair it, or use your own
-    account) and install the <a href="https://github.com/vortex-303/vortex-notes">vortex-notes
-    skill</a> so it knows the conventions — daily notes, facts with supersession, search-first.</p>
+  <div class="agent"><h4>Cursor · other MCP apps <span>one config entry</span></h4>
+    <p>Pair, then add the server to the app's MCP config (Cursor: <code>~/.cursor/mcp.json</code>).
+    <code>pair</code> prints this entry with your real vault path filled in:</p>
+    <div class="codewrap"><pre>{ "mcpServers": { "vortex-notes": {
+  "command": "npx", "args": ["-y", "vortex-notes", "mcp"],
+  "env": { "VORTEX_NOTES_VAULT": "/path/pair/printed" } } } }</pre><button class="copy">copy</button></div>
   </div>
-  <div class="agent"><h4>Cursor · Claude Desktop · any MCP client <span>MCP</span></h4>
-    <p>Pair first, then point the client at the vault path <code>pair</code> printed:</p>
-    <div class="codewrap"><pre>{ "command": "npx", "args": ["-y", "vortex-notes", "mcp"], "env": { "VORTEX_NOTES_VAULT": "/path/from/pair" } }</pre><button class="copy">copy</button></div>
-  </div>
-  <div class="agent"><h4>Agents without MCP <span>CLI · shell</span></h4>
-    <p>Every MCP tool is also a command — <code>search</code>, <code>context</code>, <code>read</code>,
-    <code>daily</code>, <code>remember</code>, <code>write</code>, <code>edit</code> — with
-    <code>--json</code>. Install once; after <code>pair</code> they find the vault and sync on their own:</p>
+  <div class="agent"><h4>Any agent with a shell <span>CLI · OpenClaw · scripts</span></h4>
+    <p>No MCP needed: the same tools are plain commands. Install once (so <code>vortex-notes</code> is on
+    PATH), pair, and go:</p>
     <div class="codewrap"><pre>npm install -g vortex-notes@latest
-vortex-notes remember "Kiln max is cone 8" --topic kiln</pre><button class="copy">copy</button></div>
+vortex-notes pair
+
+vortex-notes context "kiln"          <span class="c"># top notes + linked notes</span>
+vortex-notes search "firing schedule"
+vortex-notes remember "Kiln max is cone 8" --topic kiln
+vortex-notes daily "fired the test tiles"</pre><button class="copy">copy</button></div>
+    <p>Add <code>--json</code> to any command. Give your agent the
+    <a href="https://github.com/vortex-303/vortex-notes/blob/main/launch/openclaw-skill/vortex-notes/SKILL.md">skill file</a>
+    (OpenClaw installs it as a skill) so it knows the commands and conventions.</p>
   </div>
-  <div class="agent"><h4>Everything else <span>plain files</span></h4>
-    <p>The vault is a folder of markdown, so any tool that reads files already works. Add
+  <div class="agent"><h4>Plain files <span>anything that reads folders</span></h4>
+    <p>The paired vault is a folder of markdown, so any tool that reads files already works. Add
     <code>--read-only</code> to <code>mcp</code> or any command for search-and-read-only access.</p>
   </div>
 </div>
@@ -333,6 +367,9 @@ vortex-notes remember "Kiln max is cone 8" --topic kiln</pre><button class="copy
 <code>edit_note</code> · <code>append_daily</code> · <code>remember</code> (facts that supersede, never delete) ·
 <code>build_context</code> · <code>recent_activity</code> · <code>list_notes</code>. Revoke any agent or
 chat connector in the app: <em>Agents &amp; devices</em> → <em>Revoke</em>.</p>
+
+<h3>See it</h3>
+<img class="demo" src="/demo.svg" alt="install, cross-lingual search, pair an agent" width="740">
 
 </section>
 <section class="door" id="selfhost">
@@ -347,6 +384,7 @@ encrypted blobs it cannot read. Point every command above at it with <code>--rel
 <footer>Vortex Notes · MIT ·
   <a href="https://github.com/vortex-303/vortex-notes">GitHub</a> ·
   <a href="https://www.npmjs.com/package/vortex-notes">npm</a> ·
+  <a href="/llms.txt">llms.txt</a> ·
   zero plaintext on this server unless you connect a chat app</footer>
 </div>
 <nav class="tabbar" aria-label="Sections">

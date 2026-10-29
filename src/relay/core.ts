@@ -25,6 +25,7 @@ import { renderPublicPage, type PublicTheme } from "./publicpage.js";
 import { appShell } from "./appshell.js";
 import { marked } from "marked";
 import { createHostedMcp } from "./hostedmcp.js";
+import { llmsTxt } from "./llmstxt.js";
 
 export const MAX_BODY = 8 * 1024 * 1024;
 const MAX_SKEW_MS = 5 * 60 * 1000;
@@ -295,6 +296,14 @@ export function createRelayCore(opts: RelayCoreOptions): RelayCore {
     const route = `${req.method} ${url.pathname}`;
 
     if (route === "GET /health") return json(200, { ok: true });
+    if (route === "GET /llms.txt") {
+      // Behind the Pages proxy the DO sees the public host via x-forwarded-host.
+      const host = req.headers.get("x-forwarded-host") ?? url.host;
+      const proto = req.headers.get("x-forwarded-proto") ?? url.protocol.replace(":", "");
+      return new Response(llmsTxt(`${proto}://${host}`), {
+        headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "public, max-age=3600" },
+      });
+    }
 
     if (route === "GET /") {
       const nonce = toB64(randomBytes(16));

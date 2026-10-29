@@ -1,6 +1,7 @@
 {
   "name": "vortex-notes",
-  "version": "0.1.9",
+  "version": "0.1.10",
+  "mcpName": "io.github.vortex-303/vortex-notes",
   "description": "Markdown notes with a first-party MCP server and zero-config local semantic search. The vault your agents can actually use.",
   "type": "module",
   "license": "MIT",

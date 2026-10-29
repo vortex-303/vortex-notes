@@ -22,10 +22,12 @@ export async function startMcpServer(vault: Vault, opts: McpOptions): Promise<vo
 
   if (opts.watch) startVaultWatcher(vault, indexer);
   const { startAutoSync } = await import("./autosync.js");
-  startAutoSync(vault); // no-op unless linked to a relay
+  const autoSync = startAutoSync(vault); // no-op unless linked to a relay
 
   const server = new McpServer({ name: "vortex-notes", version: "0.1.0" });
-  const tools = new VaultTools(vault, indexer, opts.readOnly);
+  // Writes push within a second, not at the next 30s tick: short sessions
+  // (claude -p, a quick chat) often end before that tick would come.
+  const tools = new VaultTools(vault, indexer, opts.readOnly, true, () => autoSync.nudge());
   const text = (s: string) => ({ content: [{ type: "text" as const, text: s }] });
 
   server.registerTool(
@@ -159,6 +161,22 @@ export async function startMcpServer(vault: Vault, opts: McpOptions): Promise<vo
     },
     async ({ folder, limit }) => text(tools.listNotes(folder, limit ?? 200).text)
   );
+
+  // When the client ends the session, finish pending pushes before exiting.
+  let closing = false;
+  const shutdown = () => {
+    if (closing) return;
+    closing = true;
+    const cap = setTimeout(() => process.exit(0), 8000);
+    void autoSync.flush().finally(() => {
+      clearTimeout(cap);
+      process.exit(0);
+    });
+  };
+  process.stdin.on("end", shutdown);
+  process.stdin.on("close", shutdown);
+  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", shutdown);
 
   const transport = new StdioServerTransport();
   await server.connect(transport);

@@ -118,7 +118,7 @@ export async function startRelay(
       if (v !== undefined) headers.set(k, Array.isArray(v) ? v.join(", ") : v);
     }
     const hasBody = req.method !== "GET" && req.method !== "HEAD";
-    const request = new Request(new URL(req.url ?? "/", "http://relay"), { method: req.method, headers, body: hasBody ? new Uint8Array(body) : undefined });
+    const request = new Request(new URL(req.url ?? "/", `http://${req.headers.host ?? "relay"}`), { method: req.method, headers, body: hasBody ? new Uint8Array(body) : undefined });
     const response = await core.handle(request, {
       country: () => countryFromReader(geo, clientIp(req.headers, req.socket?.remoteAddress)),
     });

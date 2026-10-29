@@ -85,3 +85,10 @@ test("node path: Homebrew Cellar path maps to the stable bin symlink when it exi
   assert.equal(stableNode(`${prefix}/Cellar/node/25.2.1/bin/node`), `${prefix}/bin/node`);
   assert.equal(stableNode("/usr/local/bin/node"), "/usr/local/bin/node");
 });
+
+test("node path: an app-private runtime (~/.hermes/node) yields to a system node when there is one", () => {
+  const sys = path.join(tmp(), "node");
+  fs.writeFileSync(sys, "");
+  assert.equal(stableNode("/Users/x/.hermes/node/bin/node", [sys]), sys);
+  assert.equal(stableNode("/Users/x/.hermes/node/bin/node", ["/nope/node"]), "/Users/x/.hermes/node/bin/node");
+});

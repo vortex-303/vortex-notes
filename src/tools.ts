@@ -23,7 +23,9 @@ export class VaultTools {
     readonly indexer: Indexer,
     private readonly readOnly = false,
     /** false for one-shot CLI calls: embeddings catch up on the next search */
-    private readonly embedOnWrite = true
+    private readonly embedOnWrite = true,
+    /** called after every successful write (the MCP server uses it to push soon) */
+    private readonly onWrite?: (rel: string) => void
   ) {}
 
   private guardWrite(): void {
@@ -39,6 +41,7 @@ export class VaultTools {
   private touched(rel: string): void {
     this.indexer.indexNote(rel);
     if (this.embedOnWrite) void this.indexer.embedPending();
+    this.onWrite?.(rel);
   }
 
   async searchNotes(query: string, limit = 8, mode: "hybrid" | "keyword" = "hybrid"): Promise<ToolResult> {

@@ -1,0 +1,36 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.vortex-303/vortex-notes",
+  "title": "Vortex Notes",
+  "description": "E2E-encrypted markdown notes as shared memory for you and your agents, with local semantic search.",
+  "websiteUrl": "https://vortex-notes.pages.dev",
+  "repository": {
+    "url": "https://github.com/vortex-303/vortex-notes",
+    "source": "github",
+    "id": "1299210298"
+  },
+  "version": "0.1.10",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "vortex-notes",
+      "version": "0.1.10",
+      "transport": { "type": "stdio" },
+      "packageArguments": [{ "type": "positional", "value": "mcp" }],
+      "environmentVariables": [
+        {
+          "name": "VORTEX_NOTES_VAULT",
+          "description": "Vault folder to serve. Optional: after `npx vortex-notes@latest pair` the paired vault is found automatically.",
+          "isRequired": false,
+          "format": "filepath"
+        },
+        {
+          "name": "VORTEX_NOTES_READONLY",
+          "description": "Set to 1 for search-and-read-only access.",
+          "isRequired": false,
+          "format": "string"
+        }
+      ]
+    }
+  ]
+}

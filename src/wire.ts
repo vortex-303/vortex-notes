@@ -34,10 +34,17 @@ export interface WireResult {
   note: string;
 }
 
-/** Homebrew's execPath is versioned (…/Cellar/node/25.2.1/bin/node) and dies on upgrade; use its stable symlink. */
-export function stableNode(execPath = process.execPath): string {
+/**
+ * A node path that survives upgrades: Homebrew's execPath is versioned
+ * (…/Cellar/node/25.2.1/bin/node) → use its stable symlink; and a node that
+ * belongs to another app's private runtime (e.g. ~/.hermes/node, which some
+ * installers symlink onto PATH) → prefer a system node when one exists.
+ */
+export function stableNode(execPath = process.execPath, systemNodes = ["/opt/homebrew/bin/node", "/usr/local/bin/node"]): string {
   const m = execPath.match(/^(.*)\/Cellar\/node(?:@[^/]+)?\/[^/]+\/bin\/node$/);
-  return m && fs.existsSync(`${m[1]}/bin/node`) ? `${m[1]}/bin/node` : execPath;
+  if (m && fs.existsSync(`${m[1]}/bin/node`)) return `${m[1]}/bin/node`;
+  if (/\/\.hermes\//.test(execPath)) return systemNodes.find((p) => fs.existsSync(p)) ?? execPath;
+  return execPath;
 }
 
 export function launchCommand(cliPath: string, nodePath = stableNode()): string[] {
