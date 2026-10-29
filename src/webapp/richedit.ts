@@ -5,7 +5,7 @@
  *
  * Fidelity rules (agents and Obsidian read these files):
  * - an untouched note is never re-serialized: getMarkdown() returns the
- *   original body byte for byte until the user actually edits;
+ *   original body byte for byte until the markdown actually changes;
  * - on open, a note whose round trip would change what it renders to (raw
  *   HTML, footnotes, …) is refused, and the caller opens it as markdown.
  */
@@ -16,6 +16,7 @@ import { TaskList } from "@tiptap/extension-task-list";
 import { TaskItem } from "@tiptap/extension-task-item";
 import { TableKit } from "@tiptap/extension-table";
 import Image from "@tiptap/extension-image";
+import Link from "@tiptap/extension-link";
 import { Placeholder } from "@tiptap/extensions";
 import { marked } from "marked";
 import type { EditorHooks, FormatKind, NoteEditor } from "./editor.js";
@@ -56,6 +57,18 @@ const Wikilink = Node.create({
   },
 });
 
+/** Links whose text is their own address go back to the file as the bare URL, as they came. */
+const BareLink = Link.extend({
+  // Marks are serialized around a placeholder; the real link text arrives as ctx.meta.markText.
+  renderMarkdown(node, h, ctx) {
+    const href = String(node.attrs?.href ?? "");
+    const inner = h.renderChildren(node);
+    const text = (ctx?.meta?.markText as string | undefined) ?? inner;
+    if (!node.attrs?.title && text === href && /^https?:\/\//.test(href)) return inner;
+    return node.attrs?.title ? `[${inner}](${href} "${node.attrs.title}")` : `[${inner}](${href})`;
+  },
+});
+
 /** Normalized rendered HTML: equal for two markdown texts that look the same. */
 function renderedShape(md: string): string {
   return (marked.parse(md, { async: false, gfm: true }) as string)
@@ -83,8 +96,9 @@ export function createRichEditor(parent: HTMLElement, body: string, hooks: Edito
     extensions: [
       StarterKit.configure({
         heading: { levels: [1, 2, 3] },
-        link: { openOnClick: false, autolink: true, linkOnPaste: true },
+        link: false,
       }),
+      BareLink.configure({ openOnClick: false, autolink: true, linkOnPaste: true }),
       TaskList,
       TaskItem.configure({ nested: true }),
       TableKit.configure({ table: { resizable: false } }),
@@ -119,25 +133,24 @@ export function createRichEditor(parent: HTMLElement, body: string, hooks: Edito
   });
 
   // Refuse notes the rich model would change (compare what both render to).
-  if (renderedShape(editor.getMarkdown()) !== renderedShape(body)) {
+  const baseline = editor.getMarkdown();
+  if (renderedShape(baseline) !== renderedShape(body)) {
     editor.destroy();
     parent.innerHTML = "";
     return null;
   }
 
-  let dirty = false;
-  editor.on("update", () => {
-    dirty = true;
-    hooks.onChange();
-  });
+  // "Changed" means the markdown changed: editor housekeeping (e.g. the empty
+  // paragraph Tiptap adds after a trailing table on first click) is not an edit.
+  editor.on("update", () => hooks.onChange());
   editor.on("blur", () => hooks.onBlur());
   const trailingNewline = body.endsWith("\n");
 
   return {
     mode: "rich",
     getMarkdown: () => {
-      if (!dirty) return body;
       const md = editor.getMarkdown();
+      if (md.trimEnd() === baseline.trimEnd()) return body;
       return trailingNewline && !md.endsWith("\n") ? md + "\n" : md;
     },
     focus: () => editor.commands.focus(),

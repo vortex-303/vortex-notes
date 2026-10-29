@@ -26,6 +26,8 @@ const rich = "#editor.rich .ProseMirror";
 
 const CORPUS = `Intro with **bold**, *italic*, ~~gone~~ and \`code\`. See [[Clay notes]] and [the site](https://example.com).
 
+Dashboard: http://z270x.local:19999 · folder link [[lab/kiln-shed]]
+
 ## Firing
 
 - cone 6
@@ -69,6 +71,7 @@ try {
   await page.keyboard.press("Escape");
   await call(url, "write_note", { title: "Kiln", content: CORPUS });
   await call(url, "write_note", { title: "Clay notes", content: "B-mix stoneware." });
+  await call(url, "write_note", { title: "kiln-shed", folder: "lab", content: "The shed." });
   await call(url, "write_note", { title: "Raw html", content: "Before<div align=\"center\">centered</div>\n\nAfter[^1]\n\n[^1]: a footnote" });
   await page.reload();
   await page.waitForSelector("#main", { state: "visible", timeout: 15000 });
@@ -90,18 +93,28 @@ try {
   check("heading renders as a heading", (await page.locator(`${rich} h2`).count()) === 1);
   check("checklist renders real checkboxes", (await page.locator(`${rich} ul[data-type="taskList"] input[type=checkbox]`).count()) === 2);
   check("table renders", (await page.locator(`${rich} table td`).count()) >= 2);
-  check("wikilink renders as a link", (await page.locator(`${rich} a.wikilink`).textContent()) === "Clay notes");
+  check("wikilink renders as a link", (await page.locator(`${rich} a.wikilink[data-wikilink="Clay notes"]`).textContent()) === "Clay notes");
   check("Aa button is shown", await page.isVisible("#aaBtn"));
   if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/rich-desktop.png`, fullPage: true });
+
+  check("bare URL renders as a link", (await page.locator(`${rich} a[href="http://z270x.local:19999"]`).count()) === 1);
+  const [tab] = await Promise.all([ctx.waitForEvent("page", { timeout: 3000 }).catch(() => null), page.click(`${rich} a[href="http://z270x.local:19999"]`)]);
+  check("clicking a bare URL opens it in a new tab (no edit mode needed)", !!tab && tab.url().startsWith("http://z270x.local:19999"));
+  await tab?.close();
+  await page.click(`${rich} a[data-wikilink="lab/kiln-shed"]`);
+  await page.waitForFunction(() => /kiln-shed/.test(document.querySelector(".notehead h1")?.textContent ?? ""), null, { timeout: 5000 }).catch(() => {});
+  check("folder wikilink [[lab/kiln-shed]] opens that note", /kiln-shed/.test(await page.textContent(".notehead h1")));
+  await open("kiln.md");
 
   // 2. untouched note → no save on close
   await page.click('[data-path="clay-notes.md"]');
   await page.waitForTimeout(800);
   check("opening and leaving an untouched note saves nothing", writes.length === 0);
+  if (writes.length) console.log("   writes:", writes.map((u) => decodeURIComponent(u.split("/docs/")[1])));
 
   // 3. wikilink opens the note
   await open("kiln.md");
-  await page.click(`${rich} a.wikilink`);
+  await page.click(`${rich} a.wikilink[data-wikilink="Clay notes"]`);
   await page.waitForFunction(() => /Clay notes/.test(document.querySelector(".notehead h1")?.textContent ?? ""), null, { timeout: 5000 });
   check("clicking a wikilink opens that note", true);
 
@@ -116,6 +129,8 @@ try {
   check("edit saved as markdown heading", /## Firing schedule/.test(after));
   check("checkbox click stored as - [x]", /- \[x\] order shelves/.test(after));
   check("wikilink kept verbatim", after.includes("[[Clay notes]]"));
+  check("bare URL kept as a bare URL", after.includes("Dashboard: http://z270x.local:19999 ·"));
+  if (!after.includes("Dashboard: http://z270x.local:19999 ·")) console.log("   got:", after.split("\n").find((l) => l.includes("Dashboard")));
   check("table kept as markdown", /\| *6 *\| *1222 *\|/.test(after));
   check("code block kept", after.includes("temp = 1222"));
   check("nested bullet kept", /\n\s{2,}[-*] overnight/.test(after));
