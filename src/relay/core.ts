@@ -28,6 +28,7 @@ import { createHostedMcp } from "./hostedmcp.js";
 import { llmsTxt } from "./llmstxt.js";
 import { createOAuth, corsHeaders } from "./oauth.js";
 import { privacyPage, termsPage } from "./legal.js";
+import { FAVICON_ICO_B64 } from "./brand.js";
 
 export const MAX_BODY = 8 * 1024 * 1024;
 const MAX_SKEW_MS = 5 * 60 * 1000;
@@ -37,7 +38,7 @@ const PAIR_TTL_MS = 15 * 60 * 1000;
 // shell (HTML/JS/manifest/icons) — never /v1/* API traffic, so no ciphertext or
 // signed responses are ever stored. Network-first for the shell so updates land
 // the moment you're online; cache is the offline fallback.
-const SW_CACHE = "vortex-notes-v2";
+const SW_CACHE = "vortex-notes-v3";
 const SERVICE_WORKER = `
 const CACHE = ${JSON.stringify(SW_CACHE)};
 const SHELL = ["/app", "/app/bundle.js", "/app/manifest.webmanifest",
@@ -301,6 +302,9 @@ export function createRelayCore(opts: RelayCoreOptions): RelayCore {
     const route = `${req.method} ${url.pathname}`;
 
     if (route === "GET /health") return json(200, { ok: true });
+    if (route === "GET /favicon.ico") {
+      return new Response(fromB64(FAVICON_ICO_B64) as Uint8Array<ArrayBuffer>, { headers: { "Content-Type": "image/x-icon", "Cache-Control": "public, max-age=86400" } });
+    }
     if (route === "GET /privacy") return html(200, privacyPage(), { "Cache-Control": "public, max-age=3600" });
     if (route === "GET /terms") return html(200, termsPage(), { "Cache-Control": "public, max-age=3600" });
     if (route === "GET /.well-known/openai-apps-challenge" && opts.openaiAppsChallenge) {

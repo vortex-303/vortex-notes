@@ -4,24 +4,14 @@
  * content can never execute anything on our origin.
  */
 
+import { MARK, FAVICON_HREF } from "./brand.js";
+
 export type PublicTheme = "manuscript" | "vortex" | "typewriter";
 
 const NOISE =
   "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")";
 
-const MARK = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-<g stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
-<path d="M12 2.75 A9.25 9.25 0 0 1 21.25 12"/>
-<path d="M12 2.75 A9.25 9.25 0 0 1 21.25 12" transform="rotate(120 12 12)"/>
-<path d="M12 2.75 A9.25 9.25 0 0 1 21.25 12" transform="rotate(240 12 12)"/>
-</g>
-<g stroke="currentColor" stroke-width="1.6" stroke-linecap="round" opacity="0.5">
-<path d="M12 6.75 A5.25 5.25 0 0 1 17.25 12"/>
-<path d="M12 6.75 A5.25 5.25 0 0 1 17.25 12" transform="rotate(120 12 12)"/>
-<path d="M12 6.75 A5.25 5.25 0 0 1 17.25 12" transform="rotate(240 12 12)"/>
-</g>
-<circle cx="12" cy="12" r="1.4" fill="currentColor"/>
-</svg>`;
+
 
 const THEMES: Record<PublicTheme, string> = {
   manuscript: `
@@ -109,7 +99,7 @@ export function renderPublicPage(opts: {
 <title>${escapeHtml(opts.title)}</title>
 <meta property="og:title" content="${escapeHtml(opts.title)}">
 <meta property="og:description" content="A note by ${by} — written in Vortex Notes">
-<link rel="icon" href="data:image/svg+xml,%3Csvg viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cg stroke='%2314735C' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M12 2.75 A9.25 9.25 0 0 1 21.25 12'/%3E%3Cpath d='M12 2.75 A9.25 9.25 0 0 1 21.25 12' transform='rotate(120 12 12)'/%3E%3Cpath d='M12 2.75 A9.25 9.25 0 0 1 21.25 12' transform='rotate(240 12 12)'/%3E%3C/g%3E%3Ccircle cx='12' cy='12' r='2.2' fill='%2314735C'/%3E%3C/svg%3E">
+<link rel="icon" href="${FAVICON_HREF}">
 <style>
   * { box-sizing:border-box; }
   html, body { margin:0; min-height:100%; }

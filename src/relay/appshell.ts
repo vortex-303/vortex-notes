@@ -1,4 +1,5 @@
 // The /app HTML shell — static markup + CSS; the bundle does the rest.
+import { MARK, FAVICON_HREF } from "./brand.js";
 import { icon, ICON_CSS } from "../icons.js";
 
 export function appShell(_nonce: string): string {
@@ -15,7 +16,7 @@ export function appShell(_nonce: string): string {
 <link rel="apple-touch-icon" href="/app/icon-180.png">
 <link rel="icon" type="image/png" sizes="192x192" href="/app/icon-192.png">
 <link rel="manifest" href="/app/manifest.webmanifest">
-<link rel="icon" href="data:image/svg+xml,%3Csvg viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cg stroke='%2314735C' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M12 2.75 A9.25 9.25 0 0 1 21.25 12'/%3E%3Cpath d='M12 2.75 A9.25 9.25 0 0 1 21.25 12' transform='rotate(120 12 12)'/%3E%3Cpath d='M12 2.75 A9.25 9.25 0 0 1 21.25 12' transform='rotate(240 12 12)'/%3E%3C/g%3E%3Ccircle cx='12' cy='12' r='2.2' fill='%2314735C'/%3E%3C/svg%3E">
+<link rel="icon" href="${FAVICON_HREF}">
 <title>Vortex Notes</title>
 <style>
   :root {
@@ -690,16 +691,4 @@ export function appShell(_nonce: string): string {
 </html>`;
 }
 
-const MARK_SVG = `<span class="mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-<g class="outer" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-<path d="M12 2.75 A9.25 9.25 0 0 1 21.25 12"/>
-<path d="M12 2.75 A9.25 9.25 0 0 1 21.25 12" transform="rotate(120 12 12)"/>
-<path d="M12 2.75 A9.25 9.25 0 0 1 21.25 12" transform="rotate(240 12 12)"/>
-</g>
-<g class="inner" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.5">
-<path d="M12 6.75 A5.25 5.25 0 0 1 17.25 12"/>
-<path d="M12 6.75 A5.25 5.25 0 0 1 17.25 12" transform="rotate(120 12 12)"/>
-<path d="M12 6.75 A5.25 5.25 0 0 1 17.25 12" transform="rotate(240 12 12)"/>
-</g>
-<circle cx="12" cy="12" r="1.6" fill="currentColor"/>
-</svg></span>`;
+const MARK_SVG = `<span class="mark" aria-hidden="true">${MARK}</span>`;

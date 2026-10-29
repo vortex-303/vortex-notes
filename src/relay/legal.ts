@@ -3,6 +3,8 @@
  * stores. Directory listings (Claude, ChatGPT) link here, so keep them true to
  * the code: core.ts (schema), geo.ts (country only), oauth.ts, hostedmcp.ts.
  */
+import { FAVICON_HREF } from "./brand.js";
+
 const UPDATED = "2026-10-29";
 const ISSUES = "https://github.com/vortex-303/vortex-notes/issues";
 
@@ -13,6 +15,7 @@ function page(title: string, body: string): string {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${title} · Vortex Notes</title>
+<link rel="icon" href="${FAVICON_HREF}">
 <style>
   :root { --ground:#F8FAF8; --ink:#1D2421; --ink-soft:#4A554F; --line:#DFE6E1; --accent:#14735C;
     --serif:"Charter","Iowan Old Style",Georgia,serif; --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }

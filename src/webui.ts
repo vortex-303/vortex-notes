@@ -2,6 +2,8 @@
  * The local web app: a single self-contained page. Client JS avoids
  * template literals so this file's template literal stays unambiguous.
  */
+import { MARK, FAVICON_HREF } from "./relay/brand.js";
+
 export function htmlShell(nonce: string, vaultRoot: string): string {
   const vaultName = vaultRoot.split("/").pop() ?? "vault";
   return `<!doctype html>
@@ -10,9 +12,7 @@ export function htmlShell(nonce: string, vaultRoot: string): string {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(vaultName)} — Vortex Notes</title>
-<link rel="icon" href="data:image/svg+xml,${encodeURIComponent(
-    `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><g stroke="#14735C" stroke-width="2.4" stroke-linecap="round"><path d="M12 2.75 A9.25 9.25 0 0 1 21.25 12"/><path d="M12 2.75 A9.25 9.25 0 0 1 21.25 12" transform="rotate(120 12 12)"/><path d="M12 2.75 A9.25 9.25 0 0 1 21.25 12" transform="rotate(240 12 12)"/></g><circle cx="12" cy="12" r="2.2" fill="#14735C"/></svg>`
-  )}">
+<link rel="icon" href="${FAVICON_HREF}">
 <style>
   :root {
     --ground: #F8FAF8; --surface: #FFFFFF; --ink: #1D2421; --ink-soft: #4A554F;
@@ -147,19 +147,7 @@ export function htmlShell(nonce: string, vaultRoot: string): string {
 <body>
 <aside>
   <div class="brand">
-    <h1><span class="mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <g class="outer" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-        <path d="M12 2.75 A9.25 9.25 0 0 1 21.25 12"/>
-        <path d="M12 2.75 A9.25 9.25 0 0 1 21.25 12" transform="rotate(120 12 12)"/>
-        <path d="M12 2.75 A9.25 9.25 0 0 1 21.25 12" transform="rotate(240 12 12)"/>
-      </g>
-      <g class="inner" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.5">
-        <path d="M12 6.75 A5.25 5.25 0 0 1 17.25 12"/>
-        <path d="M12 6.75 A5.25 5.25 0 0 1 17.25 12" transform="rotate(120 12 12)"/>
-        <path d="M12 6.75 A5.25 5.25 0 0 1 17.25 12" transform="rotate(240 12 12)"/>
-      </g>
-      <circle cx="12" cy="12" r="1.6" fill="currentColor"/>
-    </svg></span><span class="vx">Vortex</span> <span class="nx">Notes</span></h1>
+    <h1><span class="mark" aria-hidden="true">${MARK}</span><span class="vx">Vortex</span> <span class="nx">Notes</span></h1>
     <button class="iconbtn" id="newBtn" title="New note">＋</button>
     <button class="iconbtn" id="themeBtn" title="Toggle theme">◐</button>
   </div>
