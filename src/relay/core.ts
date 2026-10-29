@@ -296,6 +296,11 @@ export function createRelayCore(opts: RelayCoreOptions): RelayCore {
     const route = `${req.method} ${url.pathname}`;
 
     if (route === "GET /health") return json(200, { ok: true });
+    // Connectors are keyed by their secret URL, not OAuth. Answer discovery probes
+    // (ChatGPT, Claude) with a plain 404 = "no OAuth here"; a 401 reads as "sign-in required".
+    if (url.pathname.startsWith("/.well-known/") || /^\/mcp\/[^/]+\/\.well-known\//.test(url.pathname)) {
+      return json(404, { error: "Not found" });
+    }
     if (route === "GET /llms.txt") {
       // Behind the Pages proxy the DO sees the public host via x-forwarded-host.
       const host = req.headers.get("x-forwarded-host") ?? url.host;

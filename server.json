@@ -9,12 +9,12 @@
     "source": "github",
     "id": "1299210298"
   },
-  "version": "0.1.10",
+  "version": "0.1.11",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "vortex-notes",
-      "version": "0.1.10",
+      "version": "0.1.11",
       "transport": { "type": "stdio" },
       "packageArguments": [{ "type": "positional", "value": "mcp" }],
       "environmentVariables": [

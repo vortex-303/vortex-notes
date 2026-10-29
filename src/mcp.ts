@@ -1,5 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { createRequire } from "node:module";
 import { z } from "zod";
 import { Vault } from "./vault.js";
 import { Indexer, startVaultWatcher } from "./indexer.js";
@@ -24,7 +25,10 @@ export async function startMcpServer(vault: Vault, opts: McpOptions): Promise<vo
   const { startAutoSync } = await import("./autosync.js");
   const autoSync = startAutoSync(vault); // no-op unless linked to a relay
 
-  const server = new McpServer({ name: "vortex-notes", version: "0.1.0" });
+  const { version } = createRequire(import.meta.url)(
+    import.meta.url.includes("/dist-test/") ? "../../package.json" : "../package.json"
+  ) as { version: string };
+  const server = new McpServer({ name: "vortex-notes", version });
   // Writes push within a second, not at the next 30s tick: short sessions
   // (claude -p, a quick chat) often end before that tick would come.
   const tools = new VaultTools(vault, indexer, opts.readOnly, true, () => autoSync.nudge());

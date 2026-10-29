@@ -1,6 +1,29 @@
 # Vortex Notes — Status
 
-## ▶ Resume here (handoff 2026-10-28)
+## ▶ Resume here (handoff 2026-10-29, 0.1.11)
+Shipped + deployed today (prod https://vortex-notes.pages.dev, `npm run cf:deploy`;
+DO code takes ~1 min to go live after deploy):
+- Landing rewritten (`src/relay/landing.ts`): hero, 3 benefits, how-it-works, ONE
+  "Where does your AI live?" picker (8 chips, one panel each, `#connect-<id>` deep
+  links, legacy #agents/#you/#selfhost mapped), Privacy + Self-host door. Phone =
+  3 tabs. Test: `node test/e2e-landing.mjs` (SHOTS=<dir> for 390/1280 × light/dark).
+- `/.well-known/*` (and `/mcp/<t>/.well-known/*`) now 404, not 401: ChatGPT's
+  "Couldn't discover OAuth settings" pushed OAuth; pick "No authentication".
+- MCP serverInfo reports the package version (was hard-coded 0.1.0).
+- Claude.ai menu verified from the user's screenshot: Settings → Connectors → Add →
+  custom connector, auth "No sign-in" (auto-detected).
+- `TESTING.md` = 42-step hands-on field test (also a tickable page for the user).
+- Glama: Dockerfile build OK, release published, badge "9 tools, maintenance B".
+  punkpeye #10313 comment posted (still closed; maintainer to reopen).
+Release 0.1.11: bumped in package.json + server.json; the USER runs `npm publish` then
+`mcp-publisher publish`. Leftover forks awesome-mcp-servers-wong2/-appcypher: user deletes
+(token lacks delete_repo).
+Next: (1) user finishes the field test → fix the ✗s; (2) Level 2 OAuth on one `/mcp`
+URL (relay as OAuth 2.1 AS with PKCE + DCR, consent screen in the web app creates the
+connector like "Connect a chat app"; unlocks Claude directory, ChatGPT apps, registry
+remotes); (3) re-pair the Mac to the real account (field-test wrap-up), gpubox Hermes.
+
+## Earlier handoff (2026-10-28)
 State: everything live + committed (`f49775d`, main, NOT pushed — repo is public;
 push needs `gh auth switch -u vortex-303`). npm 0.1.8 published. Relay =
 https://vortex-notes.pages.dev (`npm run cf:deploy`). Fly app destroyed.

@@ -140,3 +140,23 @@ test("hosted MCP: the relay refuses keys that don't belong to the agent", async 
     await relay.close();
   }
 });
+
+// ChatGPT/Claude probe OAuth discovery before connecting; a 401 there makes them
+// insist on OAuth. These connectors use the secret URL instead, so: plain 404.
+test("hosted MCP: OAuth discovery paths say 'no OAuth here' (404, not 401)", async () => {
+  const relay = await startRelay({ port: 0 });
+  const base = `http://127.0.0.1:${relay.port}`;
+  try {
+    for (const p of [
+      "/.well-known/oauth-protected-resource",
+      "/.well-known/oauth-authorization-server",
+      "/.well-known/openid-configuration",
+      `/.well-known/oauth-protected-resource/mcp/${"a".repeat(64)}`,
+      `/mcp/${"a".repeat(64)}/.well-known/oauth-protected-resource`,
+    ]) {
+      assert.equal((await fetch(base + p)).status, 404, p);
+    }
+  } finally {
+    await relay.close();
+  }
+});

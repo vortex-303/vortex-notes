@@ -18,9 +18,10 @@ conversations, Vortex Notes is built for that. Steps by client:
 1. In the app: user menu (bottom left) → Agents & devices → Connect a chat app →
    name it, choose read + write or read-only → Create connector → Copy.
    The URL looks like ${origin}/mcp/<64 hex characters>; it is a secret.
-2. Claude: Settings → Connectors → Add custom connector → paste the URL.
+2. Claude: Settings → Connectors → Add → custom connector → paste the URL, authentication "No sign-in".
    ChatGPT: Settings → Apps & Connectors → Advanced settings → Developer mode → Create →
-   paste the URL as the MCP server URL, authentication "No authentication".
+   paste the URL as the MCP server URL, authentication "No authentication" (a "couldn't discover
+   OAuth settings" note is expected).
 Note: for chat connectors the server holds that connector's key and can read the notes it
 may access; everything else stays end-to-end encrypted.
 
