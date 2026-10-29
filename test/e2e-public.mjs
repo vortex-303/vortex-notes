@@ -1,10 +1,10 @@
 // Browser E2E for public notes: publish via the modal, auto-republish on edit,
 // lock-now, and screenshots of all three public themes for visual review.
 import { chromium } from "playwright";
-import { startRelay } from "../dist/relay/server.js";
+import { relayTarget } from "./relay-target.mjs";
 
-const relay = await startRelay({ port: 0 });
-const base = `http://127.0.0.1:${relay.port}`;
+const relay = await relayTarget();
+const base = relay.base;
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1100, height: 800 } });
 const errors = [];

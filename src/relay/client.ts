@@ -130,6 +130,17 @@ export class RelayClient {
     return ((await res.json()) as { principals: { signPub: string; name: string; kind: string; spaces?: string[]; mode?: string; registeredAt: string }[] }).principals;
   }
 
+  /** Hand a cloud agent's key seeds (sign ‖ box, 64 bytes) to the relay; returns its MCP URL token. */
+  async createConnector(agentSignPub: string, keys: Uint8Array): Promise<{ token: string; path: string }> {
+    const res = await ok(await this.signed("POST", "/v1/connectors", { agentSignPub, keys: toB64(keys) }));
+    return (await res.json()) as { token: string; path: string };
+  }
+
+  async listConnectors(): Promise<{ token: string; agentSignPub: string; createdAt: string; lastUsedAt: string | null }[]> {
+    const res = await ok(await this.signed("GET", "/v1/connectors"));
+    return ((await res.json()) as { connectors: { token: string; agentSignPub: string; createdAt: string; lastUsedAt: string | null }[] }).connectors;
+  }
+
   async revokePrincipal(signPub: string): Promise<void> {
     await ok(await this.signed("DELETE", `/v1/principals/${signPub}`));
   }

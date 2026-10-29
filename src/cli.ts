@@ -11,7 +11,7 @@ import { startWebServer } from "./server.js";
 import { initIdentity, loginIdentity, loadIdentity, hasIdentity, vortexHome } from "./identity.js";
 import { createSpace, listSpaces, getSpace, openSpaceKey, encryptDoc, decryptDoc } from "./spaces.js";
 
-const DEFAULT_RELAY = "https://vortex-relay.fly.dev";
+const DEFAULT_RELAY = "https://vortex-notes.pages.dev";
 
 const HELP = `vortex-notes — markdown vault with a first-party MCP server and local semantic search
 
@@ -62,6 +62,7 @@ Usage:
                                                 Join your space here (asks for recovery phrase once)
   vortex-notes sync [--vault <dir>]             Pull + push encrypted changes
   vortex-notes sync status [--vault <dir>]      Show link + cursor
+  vortex-notes sync move --relay <url>          Point at a relay that already has your space (migration)
 
 Vault resolution: --vault flag > VORTEX_NOTES_VAULT env > cwd if it has .vortex > ~/VortexNotes
 Set VORTEX_NOTES_NO_SEMANTIC=1 to disable embeddings (keyword search only).`;
@@ -123,7 +124,7 @@ async function main(): Promise<void> {
       console.log(`\nUseful next steps:`);
       console.log(`  vortex-notes search "anything"                      # local semantic search`);
       console.log(`  vortex-notes serve                                  # local web app`);
-      console.log(`  claude mcp add vortex-notes -- vortex-notes mcp --vault ${vault.root}`);
+      console.log(`  claude mcp add vortex-notes --scope user -- vortex-notes mcp --vault "${vault.root}"`);
       break;
     }
     case "pair": {
@@ -133,56 +134,34 @@ async function main(): Promise<void> {
       const { code, complete } = await requestPairing(relay, name);
       console.log(`\n  Pairing code:  ${code.split("").join(" ")}\n`);
       console.log(`Approve it from your notes app (${relay}/app):`);
-      console.log(`  ⋯ menu → Pair an agent → type the code\n`);
+      console.log(`  user menu (bottom left) → Agents & devices → Pair an agent → type the code\n`);
       console.log(`Waiting for approval…`);
       const r = await complete();
-      console.log(`\nPaired as "${r.name}". Notes are syncing to ${r.vault}`);
-
-      // Wire known harnesses automatically. We pass the EXACT vault via env
-      // (VORTEX_NOTES_VAULT) so the server is pinned to this paired vault —
-      // never guessing, never falling back to some other vault on the machine.
-      // Absolute node + script paths sidestep PATH problems.
-      const { spawnSync } = await import("node:child_process");
-      const fsm = await import("node:fs");
-      const cliPath = fsm.default.realpathSync(process.argv[1]);
-      const vaultEnv = `VORTEX_NOTES_VAULT=${r.vault}`;
-      let wired = false;
-      // Replace any stale entry first so re-pairs never leave a wrong one behind.
-      spawnSync("hermes", ["mcp", "remove", "vortex-notes"], { encoding: "utf8", timeout: 15000 });
-      const hermes = spawnSync(
-        "hermes",
-        ["mcp", "add", "vortex-notes", "--command", process.execPath, "--env", vaultEnv, "--args", cliPath, "mcp"],
-        { input: "Y\n", encoding: "utf8", timeout: 30000 }
+      // First pull now, so the vault is full before any harness starts the server.
+      const { syncVault } = await import("./sync.js");
+      const first = await syncVault(new Vault(r.vault)).catch((err: Error) => err);
+      console.log(
+        `\nPaired as "${r.name}". ` +
+          (first instanceof Error ? `First sync failed (${first.message}) — it retries when the server starts.` : `${first.pulled} notes synced to ${r.vault}`)
       );
-      if (hermes.status === 0) {
-        console.log(`\n✓ Wired into Hermes, pinned to this vault — type /reload-mcp in your Hermes chat and you're done.`);
-        wired = true;
+
+      // Wire every harness on this machine, pinned to this exact vault.
+      const { wireHarnesses, manualWiring } = await import("./wire.js");
+      const cliPath = (await import("node:fs")).default.realpathSync(process.argv[1]);
+      const results = wireHarnesses({ vault: r.vault, cliPath });
+      for (const w of results) {
+        console.log(w.ok ? `✓ ${w.harness}: wired — ${w.note}` : `✗ ${w.harness}: not wired — ${w.note}`);
       }
-      if (!wired) {
-        spawnSync("claude", ["mcp", "remove", "vortex-notes"], { encoding: "utf8", timeout: 15000 });
-        const claude = spawnSync(
-          "claude",
-          ["mcp", "add", "vortex-notes", "--env", vaultEnv, "--", process.execPath, cliPath, "mcp"],
-          { encoding: "utf8", timeout: 30000 }
-        );
-        if (claude.status === 0) {
-          console.log(`\n✓ Wired into Claude Code, pinned to this vault.`);
-          wired = true;
-        }
-      }
-      if (!wired) {
-        console.log(`\nWire it into your agent — the vault is pinned via VORTEX_NOTES_VAULT so it can't drift:`);
-        console.log(`  Hermes:      hermes mcp add vortex-notes --command ${process.execPath} --env ${vaultEnv} --args ${cliPath} mcp`);
-        console.log(`  Claude Code: claude mcp add vortex-notes --env ${vaultEnv} -- vortex-notes mcp`);
-        console.log(`  Any MCP:     { "command": "vortex-notes", "args": ["mcp"], "env": { "VORTEX_NOTES_VAULT": "${r.vault}" } }`);
-      }
+      if (!results.some((w) => w.ok)) console.log(`\nNo agent harness found. Wire it by hand (vault pinned so it can't drift):`);
+      else console.log(`\nAnything else:`);
+      for (const line of manualWiring(cliPath, r.vault)) console.log(line);
       break;
     }
     case "init": {
       vault.init();
       console.log(`Vault ready at ${vault.root}`);
       console.log(`\nAdd to your MCP client (e.g. Claude Code):`);
-      console.log(`  claude mcp add vortex-notes -- vortex-notes mcp --vault "${vault.root}"`);
+      console.log(`  claude mcp add vortex-notes --scope user -- vortex-notes mcp --vault "${vault.root}"`);
       break;
     }
     case "index": {
@@ -341,7 +320,7 @@ async function main(): Promise<void> {
     }
     case "sync": {
       requireVault(vault);
-      const { linkVault, joinVault, syncVault, loadSyncState, relinkVault } = await import("./sync.js");
+      const { linkVault, joinVault, syncVault, loadSyncState, relinkVault, moveVault } = await import("./sync.js");
       const sub = args.positional[0];
       if (sub === "link") {
         const relay = (args.flags.get("relay") as string) ?? DEFAULT_RELAY;
@@ -359,6 +338,11 @@ async function main(): Promise<void> {
         if (!relay) fail("Usage: vortex-notes sync relink --relay <url>");
         const state = await relinkVault(vault, relay);
         console.log(`Relinked to ${relay} (space ${state.spaceId}). Run 'vortex-notes sync' to push everything.`);
+      } else if (sub === "move") {
+        const relay = args.flags.get("relay") as string;
+        if (!relay) fail("Usage: vortex-notes sync move --relay <url>");
+        const state = await moveVault(vault, relay);
+        console.log(`Moved to ${relay} (space ${state.spaceId}, cursor ${state.cursor} kept).`);
       } else if (sub === "status") {
         const state = loadSyncState(vault);
         if (!state) console.log("Not linked. Use 'sync link' or 'sync join'.");

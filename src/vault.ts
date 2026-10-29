@@ -1,26 +1,15 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import matter from "gray-matter";
-import { ulid } from "ulid";
 import { titleFromPath, slugify } from "./textutil.js";
+import { NoteOps, parseNote, type NoteFile } from "./notes.js";
 
 export { titleFromPath, slugify };
+export type { NoteFile };
 
 export interface VaultConfig {
   semantic: boolean;
   embedModel: string;
-}
-
-export interface NoteFile {
-  /** vault-relative path, always with forward slashes */
-  path: string;
-  title: string;
-  tags: string[];
-  created?: string;
-  updated?: string;
-  body: string;
-  frontmatter: Record<string, unknown>;
 }
 
 const DEFAULT_CONFIG: VaultConfig = {
@@ -36,9 +25,11 @@ export class Vault {
   }
 
   static resolve(explicit?: string): Vault {
+    // MCP configs launch us without a shell, so a "~/..." path arrives unexpanded.
+    const expand = (p?: string) => (p && (p === "~" || p.startsWith("~/")) ? path.join(os.homedir(), p.slice(1)) : p);
     const root =
-      explicit ??
-      process.env.VORTEX_NOTES_VAULT ??
+      expand(explicit) ??
+      expand(process.env.VORTEX_NOTES_VAULT) ??
       (fs.existsSync(path.join(process.cwd(), ".vortex"))
         ? process.cwd()
         : path.join(os.homedir(), "VortexNotes"));
@@ -110,95 +101,37 @@ export class Vault {
     return out.sort();
   }
 
+  /** Formatting rules live in NoteOps (shared with the relay's hosted MCP). */
+  private get ops(): NoteOps {
+    return new NoteOps({
+      read: (rel) => (fs.existsSync(this.abs(rel)) ? fs.readFileSync(this.abs(rel), "utf8") : null),
+      write: (rel, raw) => {
+        fs.mkdirSync(path.dirname(this.abs(rel)), { recursive: true });
+        fs.writeFileSync(this.abs(rel), raw);
+      },
+    });
+  }
+
   readNote(rel: string): NoteFile {
-    const raw = fs.readFileSync(this.abs(rel), "utf8");
-    const parsed = matter(raw);
-    const fm = parsed.data ?? {};
-    return {
-      path: rel,
-      title: typeof fm.title === "string" ? fm.title : titleFromPath(rel, parsed.content),
-      tags: Array.isArray(fm.tags) ? fm.tags.map(String) : [],
-      created: fm.created ? String(fm.created) : undefined,
-      updated: fm.updated ? String(fm.updated) : undefined,
-      body: parsed.content,
-      frontmatter: fm,
-    };
+    return parseNote(rel, fs.readFileSync(this.abs(rel), "utf8"));
   }
 
   writeNote(rel: string, title: string, body: string, tags: string[] = []): string {
-    const abs = this.abs(rel);
-    fs.mkdirSync(path.dirname(abs), { recursive: true });
-    const now = new Date().toISOString();
-    const fm: Record<string, unknown> = {
-      id: ulid(),
-      title,
-      created: now,
-      updated: now,
-    };
-    if (tags.length) fm.tags = tags;
-    fs.writeFileSync(abs, matter.stringify(body.trim() + "\n", fm));
-    return rel;
+    return this.ops.writeNote(rel, title, body, tags);
   }
 
   /** Update body, preserving frontmatter and bumping `updated`. */
   updateNote(rel: string, newBody: string): void {
-    const abs = this.abs(rel);
-    const parsed = matter(fs.readFileSync(abs, "utf8"));
-    const fm = { ...parsed.data, updated: new Date().toISOString() };
-    fs.writeFileSync(abs, matter.stringify(newBody.trim() + "\n", fm));
+    this.ops.updateNote(rel, newBody);
   }
 
   dailyPath(date?: string): string {
-    const day = date ?? new Date().toISOString().slice(0, 10);
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new Error(`Invalid date: ${date} (expected YYYY-MM-DD)`);
-    return `daily/${day}.md`;
+    return this.ops.dailyPath(date);
   }
 
-  /**
-   * Record a durable fact as a dated bullet in memory/<topic>.md. When it
-   * supersedes an earlier fact, the old line stays visible with strikethrough
-   * and a pointer to the new fact's id — history is never silently erased.
-   */
-  rememberFact(
-    fact: string,
-    topic?: string,
-    supersedes?: string
-  ): { rel: string; id: string; superseded?: string } {
-    const rel = `memory/${topic ? slugify(topic) : "facts"}.md`;
-    const abs = this.abs(rel);
-    const id = "f-" + ulid().slice(-8).toLowerCase();
-    const today = new Date().toISOString().slice(0, 10);
-    const line = `- **${today}** ${fact.trim().replace(/\n+/g, " ")} \`^${id}\``;
-
-    if (!fs.existsSync(abs)) {
-      if (supersedes) throw new Error(`No facts recorded yet under ${rel}; nothing to supersede.`);
-      this.writeNote(rel, topic ? `Facts — ${topic}` : "Facts", line, ["memory"]);
-      return { rel, id };
-    }
-
-    const note = this.readNote(rel);
-    let body = note.body;
-    let superseded: string | undefined;
-    if (supersedes) {
-      const key = supersedes.replace(/^\^/, "").trim();
-      const lines = body.split("\n");
-      const byId = (l: string) => l.includes(`^${key}\``);
-      const byText = (l: string) =>
-        l.startsWith("- ") && !l.includes("~~") && l.toLowerCase().includes(key.toLowerCase());
-      const idx = lines.findIndex(key.startsWith("f-") ? byId : (l) => byId(l) || byText(l));
-      if (idx === -1) {
-        throw new Error(
-          `No fact matching "${supersedes}" in ${rel}. Pass the fact's ^id or a distinctive substring.`
-        );
-      }
-      const old = lines[idx];
-      if (old.includes("~~")) throw new Error(`That fact is already superseded: ${old.trim()}`);
-      lines[idx] = `- ~~${old.replace(/^-\s*/, "")}~~ → superseded ${today} by \`^${id}\``;
-      body = lines.join("\n");
-      superseded = old.match(/\^(f-[a-z0-9]+)/)?.[1];
-    }
-    this.updateNote(rel, body.trimEnd() + "\n" + line);
-    return { rel, id, superseded };
+  /** Dated fact in memory/<topic>.md; supersession keeps the old line, struck through. */
+  rememberFact(fact: string, topic?: string, supersedes?: string): { rel: string; id: string; superseded?: string } {
+    return this.ops.rememberFact(fact, topic, supersedes);
   }
 
   /** True if Welcome.md is still the untouched auto-generated starter note. */
@@ -211,18 +144,7 @@ export class Vault {
   }
 
   appendDaily(content: string, date?: string): string {
-    const rel = this.dailyPath(date);
-    const abs = this.abs(rel);
-    const stamp = new Date().toISOString().slice(11, 16);
-    const entry = `- **${stamp}** ${content.trim()}\n`;
-    if (!fs.existsSync(abs)) {
-      const day = rel.slice(6, 16);
-      this.writeNote(rel, day, entry, ["daily"]);
-    } else {
-      const note = this.readNote(rel);
-      this.updateNote(rel, note.body.trimEnd() + "\n" + entry);
-    }
-    return rel;
+    return this.ops.appendDaily(content, date);
   }
 }
 

@@ -10,3 +10,5 @@ undefined/
 .vortex-agents/
 *.key
 identity.json
+dist-cf/
+.wrangler/

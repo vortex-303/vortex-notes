@@ -1,10 +1,10 @@
 // Real browser E2E for the web app: proves content shows, the ⋯ menu works,
 // and editing round-trips with no data loss. Run: node test/e2e-webapp.mjs
 import { chromium } from "playwright";
-import { startRelay } from "../dist/relay/server.js";
+import { relayTarget } from "./relay-target.mjs";
 
-const relay = await startRelay({ port: 0 });
-const base = `http://127.0.0.1:${relay.port}`;
+const relay = await relayTarget();
+const base = relay.base;
 const browser = await chromium.launch();
 const page = await browser.newPage();
 const errors = [];

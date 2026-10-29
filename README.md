@@ -3,8 +3,8 @@
 **End-to-end-encrypted notes that double as memory for your AI agents.**
 
 <p align="center">
-  <a href="https://vortex-relay.fly.dev/app"><b>▶ Open the app</b></a> ·
-  <a href="https://vortex-relay.fly.dev">Live demo</a> ·
+  <a href="https://vortex-notes.pages.dev/app"><b>▶ Open the app</b></a> ·
+  <a href="https://vortex-notes.pages.dev">Live demo</a> ·
   <a href="https://www.npmjs.com/package/vortex-notes">npm</a> ·
   <a href="#self-host-the-relay">Self-host</a>
 </p>
@@ -71,7 +71,7 @@ English query finds your Spanish notes across ~100 languages.
 
 ### Try the app
 
-Open **[vortex-relay.fly.dev/app](https://vortex-relay.fly.dev/app)**, create an
+Open **[vortex-notes.pages.dev/app](https://vortex-notes.pages.dev/app)**, create an
 account (save the 12 words), and start writing. Add it to your home screen to
 install it. That's the whole onboarding — no email, no password.
 
@@ -83,17 +83,32 @@ On the agent's machine:
 npx vortex-notes pair
 ```
 
-It prints a 6-letter code; approve it in the app from your phone. The agent now
-has its own scoped, revocable key — it never sees your recovery phrase. Or wire
-the MCP server directly:
+It prints a 6-letter code; approve it in the app (user menu → **Agents & devices** →
+**Pair an agent**). The agent gets its own scoped, revocable key and never sees your
+recovery phrase. `pair` then wires every harness it finds on that machine, pinned
+to the paired vault:
 
-```sh
-# Claude Code
-claude mcp add vortex-notes -- vortex-notes mcp --vault ~/VortexNotes
-```
+- **Claude Code**: user scope, so every project sees it
+- **Hermes**: type `/reload-mcp` afterwards
+- **OpenCode**: added to `~/.config/opencode/opencode.json`
 
-Any stdio MCP client: `{ "command": "vortex-notes", "args": ["mcp", "--vault", "/path/to/vault"] }`.
+Works over SSH too (you approve from your phone). Any other stdio MCP client:
+`{ "command": "npx", "args": ["-y", "vortex-notes", "mcp"], "env": { "VORTEX_NOTES_VAULT": "<path pair printed>" } }`.
 Add `--read-only` to make it read-only.
+
+### Connect Claude.ai, ChatGPT, or another chat app
+
+Chat apps in the browser or on your phone can only reach an MCP server by URL. In the app: user menu →
+**Agents & devices** → **Connect a chat app** creates a *cloud agent* and gives you a
+secret connector URL:
+
+- **Claude** (web, desktop, mobile): Settings → Connectors → Add custom connector → paste the URL
+- **ChatGPT**: Settings → Apps & Connectors → Advanced → Developer mode → Create → paste the URL (no authentication)
+
+This is the one opt-in exception to zero-knowledge: the relay holds that agent's
+key (encrypted at rest) so it can serve the notes that agent may access. It's scoped,
+can be read-only, and revoking it kills the URL. Everything else stays end-to-end
+encrypted.
 
 ### Use the CLI
 
@@ -110,7 +125,7 @@ model download).
 
 ### Self-host the relay
 
-The hosted relay at `vortex-relay.fly.dev` is convenience, not lock-in. Run your own:
+The hosted relay at `vortex-notes.pages.dev` is convenience, not lock-in. Run your own:
 
 ```sh
 vortex-notes identity init                       # your 12 words — shown once

@@ -2,10 +2,10 @@
 // (a phone + a laptop). A note created on one must appear on the other within a
 // couple of seconds — far under the 60s poll fallback — proving the push path.
 import { chromium } from "playwright";
-import { startRelay } from "../dist/relay/server.js";
+import { relayTarget } from "./relay-target.mjs";
 
-const relay = await startRelay({ port: 0 });
-const base = `http://127.0.0.1:${relay.port}`;
+const relay = await relayTarget();
+const base = relay.base;
 const browser = await chromium.launch();
 
 const mkPage = async () => {

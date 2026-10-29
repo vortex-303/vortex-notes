@@ -1,0 +1,29 @@
+# Relay Durable Object host. No public URL: the Pages project "vortex-notes"
+# (deploy/cf/pages) is the front door and binds this class via script_name.
+name = "vortex-notes-do"
+main = "worker.ts"
+compatibility_date = "2026-10-01"
+# gray-matter (note frontmatter, hosted MCP) needs node:fs/Buffer shims
+compatibility_flags = ["nodejs_compat"]
+workers_dev = false
+preview_urls = false
+
+[vars]
+RELAY_QUOTA_MB = "50"
+# comma-separated account pubkeys allowed on /v1/admin/*
+RELAY_ADMIN_ACCOUNT = "3e5b7fb0fdbe1bf38cf98f746e9c139677d30403c6a4e6ff533afb28f35813a1"
+
+[[durable_objects.bindings]]
+name = "RELAY"
+class_name = "Relay"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Relay"]
+
+# Local only (`npm run cf:dev`): same Worker also serves the static app.
+[env.dev]
+workers_dev = true
+vars = { RELAY_QUOTA_MB = "50", RELAY_ADMIN_ACCOUNT = "" }
+assets = { directory = "../../dist-cf/public", binding = "ASSETS", run_worker_first = true }
+durable_objects = { bindings = [{ name = "RELAY", class_name = "Relay" }] }

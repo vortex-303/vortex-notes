@@ -6,7 +6,7 @@ import path from "node:path";
 import { Vault } from "../src/vault.js";
 import { startRelay } from "../src/relay/server.js";
 import { initIdentity, loginIdentity } from "../src/identity.js";
-import { linkVault, joinVault, syncVault } from "../src/sync.js";
+import { linkVault, joinVault, syncVault, moveVault } from "../src/sync.js";
 
 process.env.VORTEX_NOTES_NO_SEMANTIC = "1";
 
@@ -78,6 +78,35 @@ test("sync: link → push → join → pull → bidirectional edits", async () =
     });
   } finally {
     await relay.close();
+  }
+});
+
+test("sync move: a migrated relay keeps the cursor (no re-push); an empty relay is refused", async () => {
+  const dbPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "vortex-move-")), "relay.db");
+  const oldRelay = await startRelay({ port: 0, dbPath });
+  const mac = newHome();
+  const v1 = freshVault();
+  await as(mac, async () => {
+    initIdentity("mac");
+    v1.writeNote("ideas.md", "Ideas", "Survives the move.");
+    await linkVault(v1, `http://127.0.0.1:${oldRelay.port}`, "personal");
+    assert.equal((await syncVault(v1)).pushed, 1);
+  });
+  await oldRelay.close();
+
+  const migrated = await startRelay({ port: 0, dbPath }); // same data, new address
+  const empty = await startRelay({ port: 0 });
+  try {
+    await as(mac, async () => {
+      await assert.rejects(moveVault(v1, `http://127.0.0.1:${empty.port}`), /not on/);
+      const state = await moveVault(v1, `http://127.0.0.1:${migrated.port}`);
+      assert.equal(state.relay, `http://127.0.0.1:${migrated.port}`);
+      const r = await syncVault(v1);
+      assert.equal(r.pulled + r.pushed, 0);
+    });
+  } finally {
+    await migrated.close();
+    await empty.close();
   }
 });
 

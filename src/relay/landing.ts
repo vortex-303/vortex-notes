@@ -1,7 +1,7 @@
 /** The landing/docs page served at the relay root ("/"). Static, self-contained. */
 import { icon } from "../icons.js";
 
-const RELAY = "https://vortex-relay.fly.dev";
+const RELAY = "https://vortex-notes.pages.dev";
 
 const MARK = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
 <g class="outer" stroke="currentColor" stroke-width="2" stroke-linecap="round">
@@ -276,16 +276,20 @@ is signed as the agent. Revoking takes one tap.</p>
   <span class="box"><b>done</b>agent syncs — scoped &amp; signed</span>
 </div>
 <p class="note">The code is single-use and expires in 15 minutes. When pairing completes, the
-command prints the exact wiring line for your harness:</p>
+command wires up every harness it finds on that machine:</p>
 
 <div class="agents">
-  <div class="agent"><h4>Claude Code <span>MCP</span></h4>
-    <p>On your own machine it uses your vault directly — no pairing needed:</p>
-    <div class="codewrap"><pre>claude mcp add vortex-notes -- vortex-notes mcp --vault ~/VortexNotes</pre><button class="copy">copy</button></div>
+  <div class="agent"><h4>Claude Code <span>MCP · pairing</span></h4>
+    <p><code>npx vortex-notes pair</code> adds it for <em>every</em> project once you approve —
+    restart any open session.</p>
   </div>
   <div class="agent"><h4>Hermes <span>MCP · pairing</span></h4>
-    <p><code>npx vortex-notes pair</code> on the Hermes machine wires it in automatically once you
-    approve — then just type <code>/reload-mcp</code> in your Hermes chat.</p>
+    <p>Same command on the Hermes machine (SSH is fine — you approve from your phone), then type
+    <code>/reload-mcp</code> in your Hermes chat.</p>
+  </div>
+  <div class="agent"><h4>OpenCode <span>MCP · pairing</span></h4>
+    <p>Same command — it adds the server to <code>~/.config/opencode/opencode.json</code>.
+    Restart OpenCode.</p>
   </div>
   <div class="agent"><h4>OpenClaw <span>skill · files</span></h4>
     <p>OpenClaw is filesystem-native: sync a vault on its machine (pair it, or use your own
@@ -293,7 +297,8 @@ command prints the exact wiring line for your harness:</p>
     skill</a> so it knows the conventions — daily notes, facts with supersession, search-first.</p>
   </div>
   <div class="agent"><h4>Cursor · Claude Desktop · any MCP client <span>MCP</span></h4>
-    <div class="codewrap"><pre>{ "command": "vortex-notes", "args": ["mcp", "--vault", "~/VortexNotes"] }</pre><button class="copy">copy</button></div>
+    <p>Pair first, then point the client at the vault path <code>pair</code> printed:</p>
+    <div class="codewrap"><pre>{ "command": "npx", "args": ["-y", "vortex-notes", "mcp"], "env": { "VORTEX_NOTES_VAULT": "/path/from/pair" } }</pre><button class="copy">copy</button></div>
   </div>
   <div class="agent"><h4>Everything else <span>plain files</span></h4>
     <p>The vault is a folder of markdown. Any tool that reads files already works, and

@@ -1,0 +1,9 @@
+# Pages front door: https://vortex-notes.pages.dev
+name = "vortex-notes"
+pages_build_output_dir = "../../../dist-cf/public"
+compatibility_date = "2026-10-01"
+
+[[durable_objects.bindings]]
+name = "RELAY"
+class_name = "Relay"
+script_name = "vortex-notes-do"

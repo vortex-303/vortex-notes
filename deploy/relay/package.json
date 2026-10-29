@@ -7,7 +7,7 @@
     "@noble/curves": "^2.2.0",
     "@noble/hashes": "^2.2.0",
     "@scure/bip39": "^2.2.0",
-    "better-sqlite3": "^11.8.0",
+    "better-sqlite3": "^13.0.3",
     "marked": "^15.0.0",
     "ws": "^8.18.0",
     "maxmind": "^4.3.0"

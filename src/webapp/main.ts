@@ -1257,6 +1257,67 @@ $("#list").addEventListener("click", (e) => {
 $("#newBtn").addEventListener("click", newNote);
 const tipsOverlay = $("#tipsOverlay");
 
+/** Certify an agent key for this space, seal the space key to it, and register it. */
+async function grantAgent(signPub: Uint8Array, encPub: Uint8Array, name: string, mode: "ro" | "rw") {
+  const cert = certifyAgent(identity!.deviceSign, signPub, encPub, name, [spaceId!], mode);
+  // grant: add the agent's sealed space key and push the updated membership
+  const spaces = await client!.listSpaces();
+  const space = spaces.find((s) => s.id === spaceId)!;
+  const sealedKeys = { ...space.sealedKeys, [cert.signPub]: toHex(sealBox(spaceKey!, encPub)) };
+  await client!.createSpace({ id: spaceId!, name: spaceId!, createdAt: space.createdAt, sealedKeys });
+  // register the agent so it can authenticate right away
+  await fetch("/v1/register", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      accountSignPub: identity!.file.accountSignPub,
+      accountEncPub: identity!.file.accountEncPub,
+      device: cert,
+      chain: identity!.file.device,
+    }),
+  });
+  return cert;
+}
+
+// --- connect a chat app: a cloud agent whose key the relay holds (hosted MCP URL) ---
+const chatOverlay = $("#chatOverlay");
+$("#chatBtn").addEventListener("click", () => {
+  if (!identity || !spaceKey) return alert("Unlock first.");
+  ($("#chatName") as HTMLInputElement).value = "";
+  $("#chatStep1").hidden = false;
+  $("#chatStep2").hidden = true;
+  $("#chatStatus").textContent = "";
+  chatOverlay.hidden = false;
+  ($("#chatName") as HTMLInputElement).focus();
+});
+$("#chatClose").addEventListener("click", () => (chatOverlay.hidden = true));
+chatOverlay.addEventListener("click", (e) => {
+  if (e.target === chatOverlay) chatOverlay.hidden = true;
+});
+$("#chatCreate").addEventListener("click", () => {
+  if (!identity || !client || !spaceKey || !spaceId) return;
+  const name = ($("#chatName") as HTMLInputElement).value.trim() || "Chat app";
+  const mode = (document.querySelector('input[name="chatMode"]:checked') as HTMLInputElement).value as "ro" | "rw";
+  $("#chatStatus").textContent = "Creating…";
+  void (async () => {
+    const sign = randomSignKeypair();
+    const box = randomBoxKeypair();
+    const cert = await grantAgent(sign.pub, box.pub, name, mode);
+    const keys = new Uint8Array(64);
+    keys.set(sign.priv, 0);
+    keys.set(box.priv, 32);
+    const { path } = await client!.createConnector(cert.signPub, keys);
+    $("#chatUrl").textContent = location.origin + path;
+    $("#chatStep1").hidden = true;
+    $("#chatStep2").hidden = false;
+    $("#chatStatus").textContent = "";
+    if (!agentsOverlay.hidden) void openAgentsPanel();
+  })().catch((e) => ($("#chatStatus").textContent = (e as Error).message));
+});
+$("#chatCopy").addEventListener("click", () => {
+  void navigator.clipboard.writeText($("#chatUrl").textContent ?? "").then(() => ($("#chatCopy").textContent = "Copied"));
+});
+
 // --- pair an agent: full approval happens in this tab (we are a certified device) ---
 const pairOverlay = $("#pairOverlay");
 let pendingPair: { code: string; name: string; signPub: string; encPub: string } | null = null;
@@ -1303,23 +1364,7 @@ $("#pairApprove").addEventListener("click", () => {
   const mode = (document.querySelector('input[name="pairMode"]:checked') as HTMLInputElement).value as "ro" | "rw";
   $("#pairStatus").textContent = "Certifying and granting…";
   void (async () => {
-    const cert = certifyAgent(identity!.deviceSign, fromHex(req.signPub), fromHex(req.encPub), req.name, [spaceId!], mode);
-    // grant: add the agent's sealed space key and push the updated membership
-    const spaces = await client!.listSpaces();
-    const space = spaces.find((s) => s.id === spaceId)!;
-    const sealedKeys = { ...space.sealedKeys, [cert.signPub]: toHex(sealBox(spaceKey!, fromHex(req.encPub))) };
-    await client!.createSpace({ id: spaceId!, name: spaceId!, createdAt: space.createdAt, sealedKeys });
-    // register the agent so it can authenticate the moment it polls
-    await fetch("/v1/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        accountSignPub: identity!.file.accountSignPub,
-        accountEncPub: identity!.file.accountEncPub,
-        device: cert,
-        chain: identity!.file.device,
-      }),
-    });
+    const cert = await grantAgent(fromHex(req.signPub), fromHex(req.encPub), req.name, mode);
     const grant = {
       v: 1,
       relay: location.origin,
@@ -1333,11 +1378,16 @@ $("#pairApprove").addEventListener("click", () => {
     window.setTimeout(() => (pairOverlay.hidden = true), 2500);
   })().catch((e) => ($("#pairStatus").textContent = (e as Error).message));
 });
+$("#acctIdCopy").addEventListener("click", () => {
+  void navigator.clipboard.writeText($("#acctId").textContent ?? "").then(() => ($("#acctIdCopy").textContent = "Copied"));
+});
 // --- account & recovery: reveal the session phrase (never persisted) ---
 const acctOverlay = $("#acctOverlay");
 $("#acctBtn").addEventListener("click", () => {
   if (!identity) return alert("Unlock first.");
   $("#acctFp").textContent = identity.file.accountSignPub.slice(0, 16) + "…";
+  $("#acctId").textContent = identity.file.accountSignPub;
+  $("#acctIdCopy").textContent = "Copy";
   const reveal = $("#phraseReveal");
   const hasPhrase = sessionPhrase.length > 0;
   $("#acctNote").hidden = hasPhrase;
@@ -1633,22 +1683,33 @@ async function openAgentsPanel(): Promise<void> {
   $("#agentsList").innerHTML = '<div class="tipsintro">Loading…</div>';
   agentsOverlay.hidden = false;
   try {
-    const principals = await client.listPrincipals();
+    const [principals, connectors] = await Promise.all([client.listPrincipals(), client.listConnectors().catch(() => [])]);
+    const cloud = new Map(connectors.map((c) => [c.agentSignPub, c.token]));
     const rows = principals
       .map((p) => {
         const isSelf = p.signPub === identity?.file.device.signPub;
         const kind = p.kind === "agent" ? "agent" : "device";
-        const scope = p.kind === "agent" ? `${p.mode === "ro" ? "read-only" : "read+write"} · ${(p.spaces ?? []).length} space${(p.spaces ?? []).length === 1 ? "" : "s"}` : "full access";
+        const token = cloud.get(p.signPub);
+        const scope = (token ? "chat connector · relay holds its key · " : "") +
+          (p.kind === "agent" ? `${p.mode === "ro" ? "read-only" : "read+write"} · ${(p.spaces ?? []).length} space${(p.spaces ?? []).length === 1 ? "" : "s"}` : "full access");
         return (
           `<div class="agentrow">${icon(kind)}` +
           `<div class="col"><span class="an">${esc(p.name)}${isSelf ? " (this device)" : ""}</span>` +
           `<span class="am">${esc(scope)} · ${p.signPub.slice(0, 10)}…</span></div>` +
+          (token ? `<button class="mbtn" data-copyurl="${esc(location.origin + "/mcp/" + token)}">Copy URL</button>` : "") +
           (isSelf ? "" : `<button class="mbtn danger" data-revoke="${esc(p.signPub)}" data-name="${esc(p.name)}">Revoke</button>`) +
           `</div>`
         );
       })
       .join("");
     $("#agentsList").innerHTML = rows || '<div class="tipsintro">No devices or agents yet.</div>';
+    $("#agentsList")
+      .querySelectorAll("[data-copyurl]")
+      .forEach((b) =>
+        b.addEventListener("click", () => {
+          void navigator.clipboard.writeText((b as HTMLElement).dataset.copyurl!).then(() => (b.textContent = "Copied"));
+        })
+      );
     $("#agentsList")
       .querySelectorAll("[data-revoke]")
       .forEach((b) =>

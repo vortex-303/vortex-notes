@@ -3,10 +3,10 @@
 // reload). The lock screen's recovery link must open history, show the
 // pre-lock version as readable, and restore it without any password.
 import { chromium } from "playwright";
-import { startRelay } from "../dist/relay/server.js";
+import { relayTarget } from "./relay-target.mjs";
 
-const relay = await startRelay({ port: 0 });
-const base = `http://127.0.0.1:${relay.port}`;
+const relay = await relayTarget();
+const base = relay.base;
 const browser = await chromium.launch();
 const context = await browser.newContext();
 await context.grantPermissions(["clipboard-read", "clipboard-write"]);

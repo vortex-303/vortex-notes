@@ -46,7 +46,7 @@ The rest, briefly:
 Stack: TypeScript, all-MIT (noble/scure crypto, CodeMirror, better-sqlite3,
 transformers.js). ~90 tests incl. a browser suite. Relay is a small Node service on Fly.
 
-Repo: https://github.com/vortex-303/vortex-notes · try it: https://vortex-relay.fly.dev
+Repo: https://github.com/vortex-303/vortex-notes · try it: https://vortex-notes.pages.dev
 
 Happy to go deep on the design: the account→device→agent certificate chain (how an
 agent gets scoped access without ever seeing your phrase), why I shipped 3-way merge
@@ -72,6 +72,6 @@ the WebSocket sync stays a content-free doorbell so the E2EE model is untouched.
 ## Status / checklist
 - [x] Repo public: github.com/vortex-303/vortex-notes (topics: mcp, agent-memory, notes, e2ee, markdown)
 - [x] npm: vortex-notes (account: mailstorm) — bump to current before HN so installs match the post
-- [x] Live app + hosted relay: vortex-relay.fly.dev (self-host free; hosted is ours, not public infra)
+- [x] Live app + hosted relay: vortex-notes.pages.dev (self-host free; hosted is ours, not public infra)
 - [ ] 20–30s demo (screen-record: `npx vortex-notes pair` → approve on phone → agent reads/writes a note; or the 2-device instant-sync moment)
 - [ ] Round 1 got flagged (item 48945862, acct vortex11) — use a fresh, aged account and the "Show HN:" prefix; email hn@ycombinator.com for the second-chance pool if it stalls

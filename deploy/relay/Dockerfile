@@ -1,4 +1,4 @@
-# Build context = repo root; dist/ must be built first (npm run build).
+# Self-host image for the relay (Node). Build context = repo root; dist/ must be built first (npm run build).
 FROM node:22-slim
 WORKDIR /app
 COPY deploy/relay/package.json ./package.json

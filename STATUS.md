@@ -1,5 +1,47 @@
 # Vortex Notes — Status
 
+## Hosted MCP connectors (2026-10-28) — claude.ai / ChatGPT
+- Web: Agents & devices → "Connect a chat app": browser makes a cloud-agent keypair,
+  certifies + seals the space key (`grantAgent` in webapp, shared with pair approve),
+  uploads seeds (sign‖box, 64B) to `POST /v1/connectors` → URL `/mcp/<64-hex token>`.
+- Relay (`src/relay/hostedmcp.ts`, wired in core `handleMcp`): stateless Streamable
+  HTTP JSON-RPC (initialize/tools/list/tools/call/ping; notifications → 202), same tool
+  names as stdio MCP, keyword search only. Decrypted view cached per space by seq.
+  Writes go through core `appendUpdate` (quota + WS poke), author = cloud agent.
+- Seeds verified to match the agent cert; stored `k1:` under secret
+  RELAY_CONNECTOR_KEK (CF secret set; Node env) else `p1:` plain. Revoking the
+  principal deletes the connector row → URL 404.
+- Note formatting moved to `src/notes.ts` (NoteOps over a read/write backend);
+  Vault delegates. CF needs `nodejs_compat` for gray-matter.
+- Tests: test/hostedmcp.test.ts, test/e2e-connector.mjs (passes on Node, local CF, prod).
+- Next: OAuth instead of secret URL; semantic search on relay (Workers AI) maybe.
+
+## Hosting (2026-10-28): Cloudflare free tier, Fly deleted
+- Hosted relay = **https://vortex-notes.pages.dev** (fresh database; all Fly-era
+  accounts are gone by choice). Fly app `vortex-relay` + volume destroyed.
+- Relay logic is platform-neutral in `src/relay/core.ts` (Fetch Request/Response +
+  sync `SqlStore`). Hosts: `src/relay/server.ts` (Node + better-sqlite3 + `ws`:
+  self-host, tests) and `deploy/cf/worker.ts` (one SQLite-backed Durable Object
+  "main", hibernatable WebSockets for /ws).
+- Front door = classic Pages project `vortex-notes` (`deploy/cf/pages`, `_worker.js`
+  from `deploy/cf/pages.ts` → DO via `script_name`). DO Worker `vortex-notes-do`
+  has `workers_dev = false` — never expose a *.workers.dev URL (account subdomain).
+- Deploy: `npm run cf:deploy`. Local CF runtime: `npm run cf:dev` (:8788), then
+  `E2E_BASE=http://127.0.0.1:8788 node test/e2e-webapp.mjs` (any e2e suite).
+- Admin/quota config lives in `deploy/cf/wrangler.toml` [vars]. Country comes
+  from `request.cf.country` (no mmdb on CF; Node self-host still uses it).
+- DO SQL gotchas: bind ArrayBuffer not Uint8Array; no lastInsertRowid (core
+  uses `INSERT … RETURNING`); migrations probe columns with `SELECT … LIMIT 0`.
+- CLI 0.1.8 (unpublished): default relay = pages.dev; new `sync move --relay`
+  (switch to a relay that already has the space, keeps cursor; `relink` is for
+  an EMPTY relay and re-uploads seals from the local copy).
+- `pair` (src/wire.ts) wires EVERY harness found: Hermes (one `--env A B`, no
+  dash-flags in --args → npm_config_yes env), Claude Code `--scope user`, OpenCode
+  ~/.config/opencode/opencode.json. From npx cache → `npx -y vortex-notes mcp`;
+  else stable node (Homebrew Cellar → bin symlink) + script. Pair does a first
+  sync. Vault.resolve expands `~` (MCP configs have no shell). Test wiring safely
+  with `env -i HOME=<tmp> PATH=/opt/homebrew/bin:/usr/bin:/bin` (no hermes/claude).
+
 **Phase 0 COMPLETE; Phase 1 slice 1a (identity) DONE (2026-07-11).** See PLAN.md for
 phases; strategy artifact: https://claude.ai/code/artifact/0b58a836-a787-450f-ac70-84ff821074f4
 

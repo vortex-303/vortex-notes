@@ -155,6 +155,25 @@ export async function relinkVault(vault: Vault, relayUrl: string): Promise<SyncS
   return state;
 }
 
+/**
+ * Point a linked vault at a relay that already holds this space (a migrated
+ * copy of the old relay). Unlike relink, keeps the cursor and file state and
+ * never re-uploads the space record — the relay's seals stay authoritative.
+ */
+export async function moveVault(vault: Vault, relayUrl: string): Promise<SyncState> {
+  const state = loadSyncState(vault);
+  if (!state) throw new Error("Vault not linked yet — use 'sync link' first.");
+  if (state.home) process.env.VORTEX_NOTES_HOME = state.home;
+  const client = new RelayClient(relayUrl, loadIdentity());
+  const spaces = await client.listSpaces().catch(() => []); // unknown device = not a copy of our relay
+  if (!spaces.some((s) => s.id === state.spaceId)) {
+    throw new Error(`Space ${state.spaceId} is not on ${relayUrl} — use 'sync relink' to upload it instead.`);
+  }
+  state.relay = relayUrl;
+  saveSyncState(vault, state);
+  return state;
+}
+
 export interface SyncResult {
   pulled: number;
   pushed: number;

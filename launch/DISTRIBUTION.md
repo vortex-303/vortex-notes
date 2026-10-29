@@ -30,7 +30,7 @@ Status legend: [me] = Claude can execute on your word · [you] = needs your acco
 ### 4. Hermes [me: PR; you: Discord]
 - PR `launch/hermes-skill/vortex-notes/` → `NousResearch/hermes-agent` `optional-skills/` (mirror qmd's placement).
 - Discord post:
-  > Built a notes/memory backend for Hermes: plain markdown + local semantic search + E2EE sync. One command to connect: `npx vortex-notes pair` — shows a 6-letter code, you approve from your phone, Hermes gets its own scoped key (read-only optional, revocable, every edit signed as the agent). Skill in the repo. Feedback wanted: https://vortex-relay.fly.dev
+  > Built a notes/memory backend for Hermes: plain markdown + local semantic search + E2EE sync. One command to connect: `npx vortex-notes pair` — shows a 6-letter code, you approve from your phone, Hermes gets its own scoped key (read-only optional, revocable, every edit signed as the agent). Skill in the repo. Feedback wanted: https://vortex-notes.pages.dev
 
 ### 5. OpenClaw [me: skill submission; you: Discord]
 - Submit `launch/openclaw-skill/vortex-notes/` to their skills registry.

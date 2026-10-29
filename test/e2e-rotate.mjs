@@ -3,10 +3,10 @@
 // still works → reload auto-unlocks → OLD phrase is dead → NEW phrase signs in
 // and the NEW words unlock the locked note.
 import { chromium } from "playwright";
-import { startRelay } from "../dist/relay/server.js";
+import { relayTarget } from "./relay-target.mjs";
 
-const relay = await startRelay({ port: 0 });
-const base = `http://127.0.0.1:${relay.port}`;
+const relay = await relayTarget();
+const base = relay.base;
 const browser = await chromium.launch();
 const page = await (await browser.newContext()).newPage();
 const errors = [];

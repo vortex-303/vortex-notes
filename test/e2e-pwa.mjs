@@ -3,10 +3,10 @@
 // service worker are served, the SW registers and controls the page, and the
 // app shell loads with the network cut (served from the SW cache).
 import { chromium } from "playwright";
-import { startRelay } from "../dist/relay/server.js";
+import { relayTarget } from "./relay-target.mjs";
 
-const relay = await startRelay({ port: 0 });
-const base = `http://127.0.0.1:${relay.port}`;
+const relay = await relayTarget();
+const base = relay.base;
 const browser = await chromium.launch();
 const context = await browser.newContext();
 const page = await context.newPage();

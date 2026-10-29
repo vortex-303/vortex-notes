@@ -43,7 +43,7 @@ Connect the GitHub repo. Note: ours is a stdio server that pairs with a local va
 
 ### 9. awesome-selfhosted [you — deferred]
 Requires ~4-month project age + a demo. Resubmit ~November. Entry (Note-taking):
-> - Vortex Notes - E2E-encrypted markdown notes with self-hostable relay (stores ciphertext only), on-device search, and MCP agent access. `([Demo](https://vortex-relay.fly.dev))` `MIT` `Nodejs`
+> - Vortex Notes - E2E-encrypted markdown notes with self-hostable relay (stores ciphertext only), on-device search, and MCP agent access. `([Demo](https://vortex-notes.pages.dev))` `MIT` `Nodejs`
 
 ### 10. awesome-privacy / awesome-mcp / PKM lists [me — PRs, one at a time]
 Use the one-liner, filed under encrypted-notes / knowledge.
