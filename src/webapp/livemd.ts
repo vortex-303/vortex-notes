@@ -137,3 +137,6 @@ const liveTheme = EditorView.theme({
 });
 
 export const livePreview = [syntaxHighlighting(mdHighlight), livePlugin, liveTheme];
+
+/** "Edit markdown" mode: the same typography, every symbol visible. */
+export const markdownSource = [syntaxHighlighting(mdHighlight), liveTheme];

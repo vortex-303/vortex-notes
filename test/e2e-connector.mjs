@@ -32,8 +32,8 @@ try {
 
   // a note for the chat app to find
   await page.click("#newBtn");
-  await page.waitForSelector("#cm .cm-content", { timeout: 10000 });
-  await page.click("#cm .cm-content");
+  await page.waitForSelector("#editor [contenteditable=true]", { timeout: 10000 });
+  await page.click("#editor [contenteditable=true]");
   await page.keyboard.type("Cone 6 firing, slow cool overnight.");
   await page.waitForTimeout(2500); // autosave + push
 

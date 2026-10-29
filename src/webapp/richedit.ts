@@ -1,0 +1,173 @@
+/**
+ * Rich editor: notes open fully rendered and you type into the formatted text,
+ * like Apple Notes. The file stays markdown: Tiptap parses it on open and
+ * serializes it on save, with GFM tasks/tables and [[wikilinks]] kept as-is.
+ *
+ * Fidelity rules (agents and Obsidian read these files):
+ * - an untouched note is never re-serialized: getMarkdown() returns the
+ *   original body byte for byte until the user actually edits;
+ * - on open, a note whose round trip would change what it renders to (raw
+ *   HTML, footnotes, …) is refused, and the caller opens it as markdown.
+ */
+import { Editor, Node, Extension, nodeInputRule } from "@tiptap/core";
+import StarterKit from "@tiptap/starter-kit";
+import { Markdown } from "@tiptap/markdown";
+import { TaskList } from "@tiptap/extension-task-list";
+import { TaskItem } from "@tiptap/extension-task-item";
+import { TableKit } from "@tiptap/extension-table";
+import Image from "@tiptap/extension-image";
+import { Placeholder } from "@tiptap/extensions";
+import { marked } from "marked";
+import type { EditorHooks, FormatKind, NoteEditor } from "./editor.js";
+
+const WIKILINK = /^\[\[([^\][\n]+?)\]\]/;
+
+/** [[Title]] / [[Title|alias]]: an inline atom that round-trips verbatim. */
+const Wikilink = Node.create({
+  name: "wikilink",
+  group: "inline",
+  inline: true,
+  atom: true,
+  selectable: true,
+  addAttributes() {
+    return { target: { default: "" } };
+  },
+  parseHTML() {
+    return [{ tag: "a[data-wikilink]", getAttrs: (el) => ({ target: (el as HTMLElement).getAttribute("data-wikilink") ?? "" }) }];
+  },
+  renderHTML({ node }) {
+    const target = String(node.attrs.target);
+    return ["a", { "data-wikilink": target, class: "wikilink", href: "#" }, target.split("|").pop() ?? target];
+  },
+  markdownTokenName: "wikilink",
+  markdownTokenizer: {
+    name: "wikilink",
+    level: "inline",
+    start: (src: string) => src.indexOf("[["),
+    tokenize: (src: string) => {
+      const m = WIKILINK.exec(src);
+      if (m) return { type: "wikilink", raw: m[0], target: m[1] } as never;
+    },
+  },
+  parseMarkdown: (token) => ({ type: "wikilink", attrs: { target: (token as { target?: string }).target ?? "" } }),
+  renderMarkdown: (node) => `[[${node.attrs?.target ?? ""}]]`,
+  addInputRules() {
+    return [nodeInputRule({ find: /\[\[([^\][\n]+)\]\]$/, type: this.type, getAttributes: (m) => ({ target: m[1] }) })];
+  },
+});
+
+/** Normalized rendered HTML: equal for two markdown texts that look the same. */
+function renderedShape(md: string): string {
+  return (marked.parse(md, { async: false, gfm: true }) as string)
+    .replace(/<\/?p>/g, "")
+    .replace(/>\s+</g, "><")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Mount the rich editor, or return null if this note can't round-trip exactly. */
+export function createRichEditor(parent: HTMLElement, body: string, hooks: EditorHooks): NoteEditor | null {
+  const keys = Extension.create({
+    name: "vortexKeys",
+    addKeyboardShortcuts() {
+      return {
+        "Mod-s": () => (hooks.onSave(), true),
+        "Mod-Shift-l": () => this.editor.chain().focus().toggleTaskList().run(),
+        "Mod-k": () => (setLink(this.editor), true),
+      };
+    },
+  });
+
+  const editor = new Editor({
+    element: parent,
+    extensions: [
+      StarterKit.configure({
+        heading: { levels: [1, 2, 3] },
+        link: { openOnClick: false, autolink: true, linkOnPaste: true },
+      }),
+      TaskList,
+      TaskItem.configure({ nested: true }),
+      TableKit.configure({ table: { resizable: false } }),
+      Image,
+      Wikilink,
+      Placeholder.configure({ placeholder: "Start writing…" }),
+      Markdown.configure({ markedOptions: { gfm: true } }),
+      keys,
+    ],
+    content: body,
+    contentType: "markdown",
+    editorProps: {
+      attributes: { class: "richdoc", spellcheck: "true" },
+      handleClick: (_view, _pos, event) => {
+        const a = (event.target as HTMLElement).closest("a");
+        if (!a) return false;
+        const wl = a.getAttribute("data-wikilink");
+        if (wl !== null) {
+          event.preventDefault();
+          hooks.onWikilink(wl.split("|")[0]);
+          return true;
+        }
+        const href = a.getAttribute("href");
+        if (href && !event.altKey) {
+          event.preventDefault();
+          window.open(href, "_blank", "noopener");
+          return true;
+        }
+        return false;
+      },
+    },
+  });
+
+  // Refuse notes the rich model would change (compare what both render to).
+  if (renderedShape(editor.getMarkdown()) !== renderedShape(body)) {
+    editor.destroy();
+    parent.innerHTML = "";
+    return null;
+  }
+
+  let dirty = false;
+  editor.on("update", () => {
+    dirty = true;
+    hooks.onChange();
+  });
+  editor.on("blur", () => hooks.onBlur());
+  const trailingNewline = body.endsWith("\n");
+
+  return {
+    mode: "rich",
+    getMarkdown: () => {
+      if (!dirty) return body;
+      const md = editor.getMarkdown();
+      return trailingNewline && !md.endsWith("\n") ? md + "\n" : md;
+    },
+    focus: () => editor.commands.focus(),
+    destroy: () => editor.destroy(),
+    format: (kind: FormatKind) => {
+      const c = editor.chain().focus();
+      const run: Record<FormatKind, () => boolean> = {
+        title: () => c.setHeading({ level: 1 }).run(),
+        heading: () => c.setHeading({ level: 2 }).run(),
+        subheading: () => c.setHeading({ level: 3 }).run(),
+        body: () => c.setParagraph().run(),
+        bullets: () => c.toggleBulletList().run(),
+        numbers: () => c.toggleOrderedList().run(),
+        checklist: () => c.toggleTaskList().run(),
+        quote: () => c.toggleBlockquote().run(),
+        code: () => c.toggleCodeBlock().run(),
+        bold: () => c.toggleBold().run(),
+        italic: () => c.toggleItalic().run(),
+        strike: () => c.toggleStrike().run(),
+        link: () => (setLink(editor), true),
+      };
+      run[kind]();
+    },
+  };
+}
+
+function setLink(editor: Editor): void {
+  const prev = (editor.getAttributes("link").href as string | undefined) ?? "";
+  const url = prompt("Link address (leave empty to remove):", prev);
+  if (url === null) return;
+  if (!url.trim()) editor.chain().focus().extendMarkRange("link").unsetLink().run();
+  else editor.chain().focus().extendMarkRange("link").setLink({ href: url.trim() }).run();
+}

@@ -29,8 +29,8 @@ try {
   await page.click("#createBtn");
   await page.waitForSelector("#main", { state: "visible", timeout: 15000 });
   await page.click("#newBtn");
-  await page.waitForSelector("#cm .cm-content");
-  await page.click("#cm .cm-content");
+  await page.waitForSelector("#editor [contenteditable=true]");
+  await page.click("#editor [contenteditable=true]");
   await page.keyboard.type("hello admin");
   await page.waitForTimeout(1500);
 

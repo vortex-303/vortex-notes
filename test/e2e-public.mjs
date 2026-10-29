@@ -29,8 +29,8 @@ try {
 
   // note with real prose for the themed page
   await page.click("#newBtn");
-  await page.waitForSelector("#cm .cm-content");
-  await page.click("#cm .cm-content");
+  await page.waitForSelector("#editor [contenteditable=true]");
+  await page.click("#editor [contenteditable=true]");
   await page.keyboard.type("La pantalla aun brilla, pero la mano ha cambiado — ya no el amo, ya no el esclavo. Una maquina aprende a pensar, y las viejas certezas se derrumban en silencio.");
   await page.waitForTimeout(1500);
 
@@ -49,7 +49,7 @@ try {
 
   // auto-republish: edit the note, autosave, public copy updates
   await page.click("#pubClose");
-  await page.click("#cm .cm-content");
+  await page.click("#editor [contenteditable=true]");
   await page.keyboard.press("End");
   await page.keyboard.type(" NUEVA LINEA PUBLICA.");
   await page.waitForTimeout(2200); // autosave + republish
@@ -79,8 +79,8 @@ try {
   // lock-now on a locked note
   nextTitle = "Secreta";
   await page.click("#newBtn");
-  await page.waitForSelector("#cm .cm-content");
-  await page.click("#cm .cm-content");
+  await page.waitForSelector("#editor [contenteditable=true]");
+  await page.click("#editor [contenteditable=true]");
   await page.keyboard.type("contenido secreto");
   await page.waitForTimeout(1400);
   await page.click("#moreBtn");

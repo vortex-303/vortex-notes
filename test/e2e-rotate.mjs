@@ -34,16 +34,16 @@ try {
   // a plain note
   nextTitle = "Plain";
   await page.click("#newBtn");
-  await page.waitForSelector("#cm .cm-content");
-  await page.click("#cm .cm-content");
+  await page.waitForSelector("#editor [contenteditable=true]");
+  await page.click("#editor [contenteditable=true]");
   await page.keyboard.type("plain survives rotation");
   await page.waitForTimeout(1600);
 
   // a locked note (v2), left unlocked in this session
   nextTitle = "Vaulted";
   await page.click("#newBtn");
-  await page.waitForSelector("#cm .cm-content");
-  await page.click("#cm .cm-content");
+  await page.waitForSelector("#editor [contenteditable=true]");
+  await page.click("#editor [contenteditable=true]");
   await page.keyboard.type("vaulted secret");
   await page.waitForTimeout(1600);
   await page.click("#moreBtn");
@@ -103,8 +103,8 @@ try {
   await page.click("#phraseToggle");
   await page.fill("#unlockPhrase", newPhrase);
   await page.click("#phraseGo");
-  await page.waitForSelector("#cm .cm-content", { timeout: 8000 });
-  check("NEW words unlock the locked note", (await page.textContent("#cm .cm-content")).includes("vaulted secret"));
+  await page.waitForSelector("#editor [contenteditable=true]", { timeout: 8000 });
+  check("NEW words unlock the locked note", (await page.textContent("#editor [contenteditable=true]")).includes("vaulted secret"));
 
   check("no uncaught page errors", errors.length === 0);
   if (errors.length) console.log("  errors:", errors.slice(0, 3));

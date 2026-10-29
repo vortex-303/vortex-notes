@@ -29,14 +29,14 @@ try {
   // --- create a note with frontmatter + body via ＋ ---
   page.once("dialog", (d) => d.accept("poetry/Test Poem"));
   await page.click("#newBtn");
-  await page.waitForSelector("#cm .cm-content", { timeout: 10000 });
+  await page.waitForSelector("#editor [contenteditable=true]", { timeout: 10000 });
   // type a body line
-  await page.click("#cm .cm-content");
+  await page.click("#editor [contenteditable=true]");
   await page.keyboard.type("La pantalla aún brilla\nsecond line here");
   await page.waitForTimeout(1600); // debounced autosave
 
   // --- CONTENT VISIBLE in the editor (the reported bug) ---
-  const editorText = await page.textContent("#cm .cm-content");
+  const editorText = await page.textContent("#editor [contenteditable=true]");
   check("editor shows body content (not blank)", editorText.includes("La pantalla aún brilla"));
   check("editor does NOT show raw YAML frontmatter", !editorText.includes("id:") && !editorText.includes("---"));
   const metaLine = await page.textContent(".notemeta").catch(() => "");
@@ -48,18 +48,19 @@ try {
   check("⋯ menu opens", menuVisible);
   check("menu has rename + duplicate", await page.isVisible("#renameBtn") && await page.isVisible("#dupBtn"));
 
-  // --- NO DATA LOSS: switch to read view and back, content persists ---
+  // --- NO DATA LOSS: rich view → Edit markdown → rich view, content persists ---
   await page.click("#moreBtn"); // close menu
-  await page.click("#readBtn");
-  await page.waitForSelector("#article");
-  const readText = await page.textContent("#article");
-  check("read view shows content", readText.includes("La pantalla aún brilla") && readText.includes("second line here"));
-
-  // reopen editor, content still there
-  await page.click("#article");
-  await page.waitForSelector("#cm .cm-content");
-  const reText = await page.textContent("#cm .cm-content");
-  check("content survives read→edit round-trip (no data loss)", reText.includes("La pantalla aún brilla") && reText.includes("second line here"));
+  check("note opens in the rich (rendered) editor", await page.isVisible("#editor.rich .ProseMirror"));
+  await page.click("#moreBtn");
+  await page.click("#modeBtn");
+  await page.waitForSelector("#editor.source .cm-content");
+  const mdText = await page.textContent("#editor.source .cm-content");
+  check("Edit markdown shows the content", mdText.includes("La pantalla aún brilla") && mdText.includes("second line here"));
+  await page.click("#moreBtn");
+  await page.click("#modeBtn");
+  await page.waitForSelector("#editor.rich .ProseMirror");
+  const reText = await page.textContent("#editor [contenteditable=true]");
+  check("content survives rich→markdown→rich (no data loss)", reText.includes("La pantalla aún brilla") && reText.includes("second line here"));
 
   // --- duplicate works ---
   await page.click("#moreBtn");

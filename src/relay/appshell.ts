@@ -267,6 +267,47 @@ export function appShell(_nonce: string): string {
 
   /* Live editor: invisible chrome — the note is the editing surface */
   #cm { border:none; background:transparent; }
+  /* rich editor (default): the note reads like the article view and you type into it */
+  #editor.rich .ProseMirror { font:1.02rem/1.68 var(--serif); color:var(--ink); outline:none; min-height:55vh; padding-bottom:35vh;
+    caret-color:var(--accent); overflow-wrap:break-word; }
+  #editor.rich .ProseMirror > * + * { margin-top:0.75em; }
+  #editor.rich .ProseMirror p { margin:0; }
+  #editor.rich .ProseMirror h1, #editor.rich .ProseMirror h2, #editor.rich .ProseMirror h3 { font-family:var(--serif); letter-spacing:-0.01em; line-height:1.25; margin:1.1em 0 0.2em; }
+  #editor.rich .ProseMirror h1 { font-size:1.55rem; } #editor.rich .ProseMirror h2 { font-size:1.3rem; } #editor.rich .ProseMirror h3 { font-size:1.1rem; }
+  #editor.rich .ProseMirror a { color:var(--accent); text-decoration:underline; text-underline-offset:2px; cursor:pointer; }
+  #editor.rich .ProseMirror a.wikilink { text-decoration:none; border-bottom:1px solid var(--accent); }
+  #editor.rich .ProseMirror code { font:0.85em var(--mono); background:var(--code-bg); border-radius:4px; padding:0.1em 0.35em; }
+  #editor.rich .ProseMirror pre { background:var(--code-bg); border:1px solid var(--line); border-radius:8px; padding:0.9rem 1.1rem; overflow-x:auto; }
+  #editor.rich .ProseMirror pre code { background:none; padding:0; }
+  #editor.rich .ProseMirror blockquote { margin:0; padding:0.1em 1.1em; border-left:3px solid var(--accent); color:var(--ink-soft); }
+  #editor.rich .ProseMirror ul, #editor.rich .ProseMirror ol { padding-left:1.5rem; margin:0; }
+  #editor.rich .ProseMirror li > p { margin:0; }
+  #editor.rich .ProseMirror li + li { margin-top:0.2em; }
+  #editor.rich .ProseMirror ul[data-type="taskList"] { list-style:none; padding-left:0.2rem; }
+  #editor.rich .ProseMirror ul[data-type="taskList"] li { display:flex; gap:0.55rem; align-items:flex-start; }
+  #editor.rich .ProseMirror ul[data-type="taskList"] li > label { margin-top:0.28em; user-select:none; }
+  #editor.rich .ProseMirror ul[data-type="taskList"] li > label input { width:1.05em; height:1.05em; accent-color:var(--accent); cursor:pointer; }
+  #editor.rich .ProseMirror ul[data-type="taskList"] li > div { flex:1; min-width:0; }
+  #editor.rich .ProseMirror ul[data-type="taskList"] li[data-checked="true"] > div { color:var(--ink-faint); text-decoration:line-through; }
+  #editor.rich .ProseMirror s { color:var(--ink-faint); }
+  #editor.rich .ProseMirror img { max-width:100%; border-radius:6px; }
+  #editor.rich .ProseMirror hr { border:none; border-top:1px solid var(--line); margin:1.5em 0; }
+  #editor.rich .ProseMirror table { border-collapse:collapse; width:100%; font-size:0.92rem; }
+  #editor.rich .ProseMirror th, #editor.rich .ProseMirror td { border:1px solid var(--line); padding:0.45rem 0.7rem; text-align:left; vertical-align:top; }
+  #editor.rich .ProseMirror th { background:var(--code-bg); font-family:var(--sans); font-size:0.8rem; }
+  #editor.rich .ProseMirror p.is-editor-empty:first-child::before { content:attr(data-placeholder); color:var(--ink-faint); float:left; height:0; pointer-events:none; }
+  #editor.rich .ProseMirror-selectednode { outline:2px solid var(--accent-soft); border-radius:3px; }
+  .aawrap { position:relative; display:inline-flex; }
+  .aabtn { font:600 0.78rem var(--serif); }
+  .aamenu { position:absolute; top:calc(100% + 6px); right:0; z-index:21; min-width:11rem; max-height:70vh; overflow-y:auto;
+    background:var(--surface); border:1px solid var(--line); border-radius:10px; box-shadow:0 8px 28px rgba(0,0,0,0.18); padding:0.35rem; }
+  .aamenu[hidden] { display:none; }
+  .aamenu .menuitem { color:var(--ink); font:0.85rem var(--sans); padding:0.5rem 0.75rem; border-radius:7px; cursor:pointer; }
+  .aamenu .menuitem:hover { background:var(--accent-soft); color:var(--accent); }
+  .aamenu [data-fmt="title"] { font:700 1.05rem var(--serif); } .aamenu [data-fmt="heading"] { font:700 0.95rem var(--serif); }
+  .aamenu [data-fmt="subheading"] { font:700 0.88rem var(--sans); } .aamenu [data-fmt="bold"] { font-weight:700; }
+  .aamenu [data-fmt="italic"] { font-style:italic; } .aamenu [data-fmt="strike"] { text-decoration:line-through; }
+  .modenote { font:0.78rem var(--sans); color:var(--ink-faint); margin:0 0 0.8rem; }
   #cm .cm-editor { min-height:55vh; }
   .cm-bullet { color:var(--accent); display:inline-block; width:1em; }
   .cm-wikilink { color:var(--accent); border-bottom:1px solid var(--accent); cursor:pointer; }
@@ -404,6 +445,10 @@ export function appShell(_nonce: string): string {
     .dailybox { position:sticky; bottom:0; background:var(--surface);
       padding-bottom:calc(0.75rem + env(safe-area-inset-bottom)); }
     #cm .cm-editor { min-height:70dvh; }
+    #editor.rich .ProseMirror { font-size:1.05rem; min-height:70dvh; }
+    .aamenu { position:fixed; left:0.6rem; right:0.6rem; top:auto; bottom:calc(0.6rem + env(safe-area-inset-bottom)); display:flex; flex-wrap:wrap; gap:0.2rem; }
+    .aamenu[hidden] { display:none; }
+    .aamenu .menuitem { width:auto; flex:1 0 30%; padding:0.6rem 0.5rem; text-align:center; font-size:0.85rem; }
     article { font-size:1.05rem; }
   }
   @media (hover:hover) { article:hover { outline:1px dashed var(--line); outline-offset:8px; border-radius:4px; } }

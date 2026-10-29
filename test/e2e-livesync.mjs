@@ -44,8 +44,8 @@ try {
   // A creates a note; B must see it appear WITHOUT waiting for the poll
   dialogTitle = "Instant Note";
   await a.click("#newBtn");
-  await a.waitForSelector("#cm .cm-content");
-  await a.click("#cm .cm-content");
+  await a.waitForSelector("#editor [contenteditable=true]");
+  await a.click("#editor [contenteditable=true]");
   await a.keyboard.type("pushed live from device A");
   // wait only ~4s — the poll fallback is 60s, so success here is the WS path
   const t0 = Date.now();
@@ -59,8 +59,8 @@ try {
   // And the reverse direction, to prove the socket is bidirectional
   dialogTitle = "Reply Note";
   await b.click("#newBtn");
-  await b.waitForSelector("#cm .cm-content");
-  await b.click("#cm .cm-content");
+  await b.waitForSelector("#editor [contenteditable=true]");
+  await b.click("#editor [contenteditable=true]");
   await b.keyboard.type("and back from device B");
   const t1 = Date.now();
   let back = false;
@@ -74,17 +74,17 @@ try {
   // that opening it on A immediately shows the new text. (A note OPEN in the
   // editor is intentionally never clobbered — that is the deferred CRDT case.)
   await b.click('#list a[data-path="reply-note.md"]');
-  await b.waitForSelector("#cm .cm-content");
-  await b.click("#cm .cm-content");
+  await b.waitForSelector("#editor [contenteditable=true]");
+  await b.click("#editor [contenteditable=true]");
   await b.keyboard.type(" EDITED-REMOTELY");
   await b.waitForTimeout(1600); // autosave debounce + push
   const t2 = Date.now();
   // A opens the note fresh; its local copy was updated by the live poke
   await a.click('#list a[data-path="reply-note.md"]');
-  await a.waitForSelector("#cm .cm-content");
+  await a.waitForSelector("#editor [contenteditable=true]");
   let edited = false;
   while (Date.now() - t2 < 5000) {
-    if ((await a.textContent("#cm .cm-content")).includes("EDITED-REMOTELY")) { edited = true; break; }
+    if ((await a.textContent("#editor [contenteditable=true]")).includes("EDITED-REMOTELY")) { edited = true; break; }
     await a.waitForTimeout(150);
     await a.click('#list a[data-path="reply-note.md"]').catch(() => {});
   }

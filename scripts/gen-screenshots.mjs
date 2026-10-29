@@ -81,8 +81,8 @@ async function seed(page) {
   for (const n of NOTES) {
     page.setTitleForDialog(n.title);
     await page.click("#newBtn");
-    await page.waitForSelector("#cm .cm-content");
-    await page.click("#cm .cm-content");
+    await page.waitForSelector("#editor [contenteditable=true]");
+    await page.click("#editor [contenteditable=true]");
     await page.keyboard.type(n.body);
     await page.waitForTimeout(900);
   }
@@ -121,8 +121,8 @@ await m.waitForSelector("#main", { state: "visible", timeout: 15000 });
 for (const n of NOTES) {
   mtitle = n.title;
   await m.click("#newBtn");
-  await m.waitForSelector("#cm .cm-content");
-  await m.click("#cm .cm-content");
+  await m.waitForSelector("#editor [contenteditable=true]");
+  await m.click("#editor [contenteditable=true]");
   await m.keyboard.type(n.body);
   await m.waitForTimeout(700);
   await m.click("#backBtn").catch(() => {});

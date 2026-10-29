@@ -35,8 +35,8 @@ try {
 
   // new note + type secret body
   await page.click("#newBtn");
-  await page.waitForSelector("#cm .cm-content");
-  await page.click("#cm .cm-content");
+  await page.waitForSelector("#editor [contenteditable=true]");
+  await page.click("#editor [contenteditable=true]");
   await page.keyboard.type(SECRET);
   await page.waitForTimeout(1500);
 
@@ -52,14 +52,14 @@ try {
   check("note shows a lock badge + its real title in the list", (await page.textContent("#list")).includes("Diary") && (await page.locator("#list .listlock").count()) > 0);
 
   // still unlocked in-session: content readable
-  const inSession = await page.textContent("#cm .cm-content").catch(() => "");
+  const inSession = await page.textContent("#editor [contenteditable=true]").catch(() => "");
   check("stays unlocked in the same session", inSession.includes(SECRET) || inSession.includes("secret"));
 
   // second note, locked with the SAME password (for the session-wide unlock check)
   nextTitle = "Diary Two";
   await page.click("#newBtn");
-  await page.waitForSelector("#cm .cm-content");
-  await page.click("#cm .cm-content");
+  await page.waitForSelector("#editor [contenteditable=true]");
+  await page.click("#editor [contenteditable=true]");
   await page.keyboard.type("second secret note");
   await page.waitForTimeout(1200);
   await page.click("#moreBtn");
@@ -90,8 +90,8 @@ try {
   await page.click("#phraseToggle");
   await page.fill("#unlockPhrase", phrase);
   await page.click("#phraseGo");
-  await page.waitForSelector("#cm .cm-content", { timeout: 8000 });
-  check("12 words unlock the note (no password)", (await page.textContent("#cm .cm-content")).includes(SECRET));
+  await page.waitForSelector("#editor [contenteditable=true]", { timeout: 8000 });
+  check("12 words unlock the note (no password)", (await page.textContent("#editor [contenteditable=true]")).includes(SECRET));
 
   // re-lock the session and continue with the password path
   await page.click("#moreBtn");
@@ -107,15 +107,15 @@ try {
   // right password → content back, no data loss
   await page.fill("#unlockPw", "notepw123");
   await page.click("#unlockGo");
-  await page.waitForSelector("#cm .cm-content", { timeout: 8000 });
-  const unlocked = await page.textContent("#cm .cm-content");
+  await page.waitForSelector("#editor [contenteditable=true]", { timeout: 8000 });
+  const unlocked = await page.textContent("#editor [contenteditable=true]");
   check("correct password reveals the exact content (no data loss)", unlocked.includes(SECRET));
 
   // session-wide: the OTHER same-password note now opens without re-prompting
   await page.getByText("Diary Two", { exact: true }).click();
   await page.waitForTimeout(600);
   const secondOpen = await page.isVisible("#unlockPw").catch(() => false);
-  const secondBody = await page.textContent("#cm .cm-content, #note").catch(() => "");
+  const secondBody = await page.textContent("#editor [contenteditable=true], #note").catch(() => "");
   check("same-password note is unlocked for the session (no re-prompt)", !secondOpen && secondBody.includes("second secret note"));
 
   check("no uncaught page errors", errors.length === 0);

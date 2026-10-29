@@ -7,10 +7,8 @@
  * updates through the relay (CRDT merge replaces LWW in 1e part 2).
  */
 import { marked } from "marked";
-import { EditorView, minimalSetup } from "codemirror";
-import { livePreview } from "./livemd.js";
-import { keymap, ViewUpdate } from "@codemirror/view";
-import { markdown } from "@codemirror/lang-markdown";
+import { createSourceEditor, type NoteEditor, type EditorMode, type FormatKind } from "./editor.js";
+import { createRichEditor } from "./richedit.js";
 import { accountFromPhrase, generatePhrase, certifyDevice, certifyAgent, type PrincipalIdentity } from "../account.js";
 import { ulid } from "ulid";
 import {
@@ -58,7 +56,7 @@ let freshSpace = false;
 let cursor = 0;
 const notes = new Map<string, DocPayload>();
 let current: string | null = null;
-let editor: EditorView | null = null;
+let editor: NoteEditor | null = null;
 let pollTimer: number | undefined;
 
 // ---------- identity ----------
@@ -385,7 +383,7 @@ const publicMap = new Map<string, { slug: string; author: string | null; theme: 
 
 /** Full content to persist = stashed frontmatter + (re-encrypted) editor body. */
 function editorContent(): string {
-  const bodyNow = editor ? editor.state.doc.toString() : "";
+  const bodyNow = editor ? editor.getMarkdown() : "";
   return editorFmPrefix + (lockedCtx ? wrapLockedBody(lockedCtx.meta, lockedCtx.key, bodyNow) : bodyNow);
 }
 
@@ -396,7 +394,7 @@ function setSaveState(text: string): void {
 
 async function flushSave(path: string): Promise<void> {
   if (!editor) return;
-  const bodyNow = editor.state.doc.toString();
+  const bodyNow = editor.getMarkdown();
   if (bodyNow === lastSavedBody) return; // compare plaintext body, not (re-encrypted) content
   const content = editorContent();
   saveState = "saving";
@@ -517,38 +515,105 @@ function openNote(path: string): void {
   mountEditor(path, n, body, false);
 }
 
+// Rich (Apple-Notes-style) by default; "Edit markdown" per note for the session,
+// and the last choice becomes the default for new opens.
+const noteMode = new Map<string, EditorMode>();
+function preferredMode(): EditorMode {
+  try {
+    return localStorage.getItem("vn-editor-mode") === "source" ? "source" : "rich";
+  } catch {
+    return "rich";
+  }
+}
+
+const FORMATS: [FormatKind, string][] = [
+  ["title", "Title"], ["heading", "Heading"], ["subheading", "Subheading"], ["body", "Body"],
+  ["checklist", "Checklist"], ["bullets", "Bulleted list"], ["numbers", "Numbered list"],
+  ["quote", "Quote"], ["code", "Code block"], ["bold", "Bold"], ["italic", "Italic"], ["strike", "Strikethrough"], ["link", "Link…"],
+];
+
 /** Shared editor mount used by normal and unlocked-locked notes. */
 function mountEditor(path: string, n: DocPayload, body: string, locked: boolean): void {
   lastSavedBody = body;
+  const want = noteMode.get(path) ?? preferredMode();
   $("#note").innerHTML =
-    noteHead(n, `<button class="mbtn" id="readBtn">read</button><span class="moremenu"><button class="mbtn" id="moreBtn">${icon('more')}</button>${noteMenuHtml(locked, path)}</span><button class="mbtn danger" id="delBtn">delete</button>`) +
-    `<div id="cm"></div>`;
+    noteHead(
+      n,
+      `<span class="aawrap"><button class="mbtn aabtn" id="aaBtn" title="Format" aria-haspopup="true" hidden>Aa</button>` +
+        `<div class="aamenu" id="aaMenu" hidden>${FORMATS.map(([k, label]) => `<button class="menuitem" data-fmt="${k}">${label}</button>`).join("")}</div></span>` +
+        `<span class="moremenu"><button class="mbtn" id="moreBtn">${icon('more')}</button>${noteMenuHtml(locked, path)}</span><button class="mbtn danger" id="delBtn">delete</button>`
+    ) +
+    `<p class="modenote" id="modeNote" hidden></p><div id="editor"></div>`;
   const scheduleSave = () => {
     saveState = "dirty";
     setSaveState("·");
     window.clearTimeout(saveTimer);
     saveTimer = window.setTimeout(() => void flushSave(path), 1200);
   };
-  editor = new EditorView({
-    doc: body,
-    parent: $("#cm"),
-    extensions: [
-      minimalSetup,
-      markdown(),
-      EditorView.lineWrapping,
-      ...livePreview,
-      keymap.of([{ key: "Mod-s", run: () => (void flushSave(path), true) }]),
-      EditorView.updateListener.of((u: ViewUpdate) => {
-        if (u.docChanged) scheduleSave();
-      }),
-      EditorView.domEventHandlers({ blur: () => void flushSave(path) }),
-    ],
+  const hooks = {
+    onChange: scheduleSave,
+    onSave: () => void flushSave(path),
+    onBlur: () => void flushSave(path),
+    onWikilink: (target: string) => openWikilink(target),
+  };
+  const host = $("#editor");
+  let ed: NoteEditor | null = want === "rich" ? createRichEditor(host, body, hooks) : null;
+  if (want === "rich" && !ed) {
+    $("#modeNote").textContent = "This note uses markdown the rich view can't keep exactly, so it opens as markdown.";
+    $("#modeNote").hidden = false;
+  }
+  if (!ed) ed = createSourceEditor(host, body, hooks);
+  editor = ed;
+  host.className = ed.mode === "rich" ? "rich" : "source";
+
+  // Aa: formatting, the Apple Notes way (rich mode only).
+  const aaBtn = $("#aaBtn") as HTMLButtonElement;
+  const aaMenu = $("#aaMenu");
+  aaBtn.hidden = ed.mode !== "rich";
+  aaBtn.addEventListener("mousedown", (e) => e.preventDefault()); // keep the selection
+  aaBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    aaMenu.hidden = !aaMenu.hidden;
   });
-  $("#readBtn").addEventListener("click", () => void closeEditor().then(() => openReader(path)));
+  aaMenu.addEventListener("mousedown", (e) => e.preventDefault());
+  aaMenu.addEventListener("click", (e) => {
+    const b = (e.target as HTMLElement).closest("[data-fmt]") as HTMLElement | null;
+    if (!b) return;
+    aaMenu.hidden = true;
+    editor?.format(b.dataset.fmt as FormatKind);
+  });
+  document.addEventListener("click", (e) => {
+    if (!aaMenu.hidden && !(e.target as HTMLElement).closest(".aawrap")) aaMenu.hidden = true;
+  });
+
+  const modeBtn = $("#modeBtn");
+  modeBtn.innerHTML = ed.mode === "rich" ? `${icon("edit")} Edit markdown` : `${icon("read")} Rich text`;
+  modeBtn.addEventListener("click", () => {
+    const next: EditorMode = editor?.mode === "rich" ? "source" : "rich";
+    noteMode.set(path, next);
+    try {
+      localStorage.setItem("vn-editor-mode", next);
+    } catch { /* private mode: per-session only */ }
+    void closeEditor().then(() => openNote(path));
+  });
   wireCommonNoteButtons(path);
   setMobileNoteOpen(true);
   renderList(($("#filter") as HTMLInputElement).value.trim().toLowerCase());
   $("#pane").scrollTop = 0;
+}
+
+/** [[Target]] → the note whose title or file name matches. */
+function openWikilink(target: string): void {
+  const t = target.trim().toLowerCase();
+  const slug = slugify(target);
+  for (const [p, nn] of notes) {
+    const file = p.split("/").pop()!.replace(/\.md$/, "").toLowerCase();
+    if (noteTitle(nn).toLowerCase() === t || p.replace(/\.md$/, "").toLowerCase() === t || file === t || file === slug) {
+      void closeEditor().then(() => openNote(p));
+      return;
+    }
+  }
+  setSaveState(`No note named "${target}"`);
 }
 
 /** Prompt for the note password; on success cache it and reopen unlocked. */
@@ -758,38 +823,6 @@ $("#histOverlay").addEventListener("click", (e) => {
   if (e.target === $("#histOverlay")) $("#histOverlay").hidden = true;
 });
 
-/** Reading view: fully rendered markdown; tap the text to go back to live editing. */
-function openReader(path: string): void {
-  const n = notes.get(path);
-  if (!n) return;
-  void closeEditor();
-  current = path;
-  let { body } = splitFrontmatter(n.content);
-  const env = findEnvelope(body);
-  if (env) {
-    const cached = sessionKeys.get(path);
-    if (!cached) return showLockScreen(path, n, env);
-    try {
-      body = openLockedBody(env, cached.key);
-    } catch {
-      sessionKeys.delete(path);
-      return showLockScreen(path, n, env);
-    }
-  }
-  $("#note").innerHTML =
-    noteHead(n, `<button class="mbtn primary" id="liveBtn">edit</button><span class="moremenu"><button class="mbtn" id="moreBtn">${icon('more')}</button>${noteMenuHtml(env !== null, path)}</span><button class="mbtn danger" id="delBtn">delete</button>`) +
-    `<article id="article" title="Tap to edit">${marked.parse(body, { async: false }) as string}</article>`;
-  $("#liveBtn").addEventListener("click", () => openNote(path));
-  $("#article").addEventListener("click", (e) => {
-    if ((e.target as HTMLElement).closest("a, input")) return;
-    openNote(path);
-  });
-  wireCommonNoteButtons(path);
-  setMobileNoteOpen(true);
-  renderList(($("#filter") as HTMLInputElement).value.trim().toLowerCase());
-  $("#pane").scrollTop = 0;
-}
-
 /**
  * The readable content of a note — the live editor text if it's open, else the
  * stored content, decrypting a session-unlocked locked note. Returns null if a
@@ -798,7 +831,7 @@ function openReader(path: string): void {
 function readableNoteContent(path: string): string | null {
   const n = notes.get(path);
   if (!n) return null;
-  if (editor && current === path) return editorFmPrefix + editor.state.doc.toString();
+  if (editor && current === path) return editorFmPrefix + editor.getMarkdown();
   const env = findEnvelope(splitFrontmatter(n.content).body);
   if (!env) return n.content;
   const cached = sessionKeys.get(path);
@@ -848,6 +881,7 @@ function noteMenuHtml(locked: boolean, path?: string): string {
     `<div class="notemenu" id="noteMenu" hidden>` +
     `<button class="menuitem" id="renameBtn">${icon('edit')} Rename / move</button>` +
     `<button class="menuitem" id="dupBtn">${icon('copy')} Duplicate</button>` +
+    `<button class="menuitem" id="modeBtn"></button>` +
     `<button class="menuitem" id="histBtn">${icon('refresh')} History</button>` +
     `<button class="menuitem" id="copyBtn">${icon('copy')} Copy content</button>` +
     `<button class="menuitem" id="dlMdBtn">${icon('read')} Download .md</button>` +
@@ -923,7 +957,7 @@ async function lockNote(path: string): Promise<void> {
   // v2: random body key wrapped for the password AND sealed to the account,
   // so the 12-word phrase can always open the note.
   const { meta, key } = makeLock(pw, identity ? fromHex(identity.file.accountEncPub) : undefined);
-  const plainBody = editor.state.doc.toString();
+  const plainBody = editor.getMarkdown();
   lockedCtx = { key, meta };
   sessionKeys.set(path, { key, meta });
   lastSavedBody = plainBody; // body itself unchanged; only its stored form is now encrypted
@@ -935,7 +969,7 @@ async function lockNote(path: string): Promise<void> {
 /** Remove the password from the currently-open (unlocked) note. */
 async function unlockPermanent(path: string): Promise<void> {
   if (!editor) return;
-  const plainBody = editor.state.doc.toString();
+  const plainBody = editor.getMarkdown();
   lockedCtx = null;
   sessionKeys.delete(path);
   await pushNote(path, editorFmPrefix + plainBody);
@@ -1032,7 +1066,7 @@ async function closeEditor(): Promise<void> {
   window.clearTimeout(saveTimer);
   if (editor && current) {
     const path = current;
-    const bodyNow = editor.state.doc.toString();
+    const bodyNow = editor.getMarkdown();
     const content = editorContent();
     editor.destroy();
     editor = null;

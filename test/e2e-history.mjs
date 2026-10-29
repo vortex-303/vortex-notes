@@ -31,8 +31,8 @@ try {
 
   // write the note (this version must be recoverable later)
   await page.click("#newBtn");
-  await page.waitForSelector("#cm .cm-content");
-  await page.click("#cm .cm-content");
+  await page.waitForSelector("#editor [contenteditable=true]");
+  await page.click("#editor [contenteditable=true]");
   await page.keyboard.type("the secret recipe is honey");
   await page.waitForTimeout(1800); // autosave push
 
@@ -70,8 +70,8 @@ try {
   await page.waitForSelector(".histarticle");
   check("preview shows the lost content", (await page.textContent(".histarticle")).includes("secret recipe"));
   await page.click("#histRestore");
-  await page.waitForSelector("#cm .cm-content", { timeout: 10000 });
-  check("restored note opens unlocked", (await page.textContent("#cm .cm-content")).includes("honey"));
+  await page.waitForSelector("#editor [contenteditable=true]", { timeout: 10000 });
+  check("restored note opens unlocked", (await page.textContent("#editor [contenteditable=true]")).includes("honey"));
   check("lock badge is gone from the list", (await page.locator("#list .listlock").count()) === 0);
 
   // history also reachable from the note menu
