@@ -9,6 +9,7 @@
 import { marked } from "marked";
 import { createSourceEditor, type NoteEditor, type EditorMode, type FormatKind } from "./editor.js";
 import { createRichEditor } from "./richedit.js";
+import { tryDiff3 } from "../merge.js";
 import { accountFromPhrase, generatePhrase, certifyDevice, certifyAgent, type PrincipalIdentity } from "../account.js";
 import { ulid } from "ulid";
 import {
@@ -319,7 +320,10 @@ async function refresh(): Promise<void> {
     }
   }
   renderList(($("#filter") as HTMLInputElement).value.trim().toLowerCase());
-  if (changedCurrent && current && !editor) openNote(current);
+  if (changedCurrent && current) {
+    if (!editor) openNote(current);
+    else void takeRemoteIntoOpenNote(current).catch(() => undefined);
+  }
 }
 
 async function pushNote(path: string, content: string): Promise<void> {
@@ -503,28 +507,13 @@ function openNote(path: string): void {
     return;
   }
   lockedCtx = null;
-  const fmEnd = frontmatterEnd(n.content);
-  let prefix = n.content.slice(0, fmEnd);
-  let body = n.content.slice(fmEnd);
-  const lead = body.match(/^\n+/); // move blank lines after frontmatter into the prefix
-  if (lead) {
-    prefix += lead[0];
-    body = body.slice(lead[0].length);
-  }
+  const { prefix, body } = splitForEditor(n.content);
   editorFmPrefix = prefix; // editorContent() = prefix + body === original, exactly
   mountEditor(path, n, body, false);
 }
 
-// Rich (Apple-Notes-style) by default; "Edit markdown" per note for the session,
-// and the last choice becomes the default for new opens.
+// Rich (Apple-Notes-style) by default; "Edit markdown" is per note, for the session.
 const noteMode = new Map<string, EditorMode>();
-function preferredMode(): EditorMode {
-  try {
-    return localStorage.getItem("vn-editor-mode") === "source" ? "source" : "rich";
-  } catch {
-    return "rich";
-  }
-}
 
 const FORMATS: [FormatKind, string][] = [
   ["title", "Title"], ["heading", "Heading"], ["subheading", "Subheading"], ["body", "Body"],
@@ -532,10 +521,64 @@ const FORMATS: [FormatKind, string][] = [
   ["quote", "Quote"], ["code", "Code block"], ["bold", "Bold"], ["italic", "Italic"], ["strike", "Strikethrough"], ["link", "Link…"],
 ];
 
+/** Frontmatter (plus the blank lines after it) stays aside; the editor edits the body. prefix + body === content. */
+function splitForEditor(content: string): { prefix: string; body: string } {
+  const fmEnd = frontmatterEnd(content);
+  let prefix = content.slice(0, fmEnd);
+  let body = content.slice(fmEnd);
+  const lead = body.match(/^\n+/);
+  if (lead) {
+    prefix += lead[0];
+    body = body.slice(lead[0].length);
+  }
+  return { prefix, body };
+}
+
+/**
+ * Another device or an agent changed the note that's open. Take it in without
+ * remounting: no local edits → show theirs; unsaved typing → diff3 merge (as the
+ * CLI and the apps do); overlapping edits → keep ours, save theirs as a conflict copy.
+ */
+async function takeRemoteIntoOpenNote(path: string): Promise<void> {
+  const n = notes.get(path);
+  if (!editor || current !== path || !n || n.content === lastSaved) return;
+  const localDirty = editor.getMarkdown() !== lastSavedBody;
+  if (lockedCtx || findEnvelope(splitFrontmatter(n.content).body)) {
+    // Locked notes: reload only when nothing local would be lost.
+    if (!localDirty) {
+      const top = $("#pane").scrollTop;
+      openNote(path);
+      $("#pane").scrollTop = top;
+    }
+    return;
+  }
+  const remote = n.content;
+  let next = remote;
+  if (localDirty) {
+    const merged = tryDiff3(lastSaved, editorContent(), remote);
+    if (merged !== null) next = merged;
+    else {
+      next = editorContent();
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+      await pushNote(path.replace(/\.md$/, `.conflict-${stamp}.md`), remote).catch(() => undefined);
+    }
+  }
+  const { prefix, body } = splitForEditor(next);
+  editorFmPrefix = prefix;
+  lastSavedBody = body;
+  lastSaved = remote;
+  editor.replaceBody(body);
+  if (next !== remote) {
+    await pushNote(path, next);
+    lastSaved = next;
+    renderList(($("#filter") as HTMLInputElement).value.trim().toLowerCase());
+  }
+}
+
 /** Shared editor mount used by normal and unlocked-locked notes. */
 function mountEditor(path: string, n: DocPayload, body: string, locked: boolean): void {
   lastSavedBody = body;
-  const want = noteMode.get(path) ?? preferredMode();
+  const want = noteMode.get(path) ?? "rich";
   $("#note").innerHTML =
     noteHead(
       n,
@@ -591,9 +634,6 @@ function mountEditor(path: string, n: DocPayload, body: string, locked: boolean)
   modeBtn.addEventListener("click", () => {
     const next: EditorMode = editor?.mode === "rich" ? "source" : "rich";
     noteMode.set(path, next);
-    try {
-      localStorage.setItem("vn-editor-mode", next);
-    } catch { /* private mode: per-session only */ }
     void closeEditor().then(() => openNote(path));
   });
   wireCommonNoteButtons(path);

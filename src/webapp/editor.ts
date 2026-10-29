@@ -22,6 +22,8 @@ export interface NoteEditor {
   getMarkdown(): string;
   focus(): void;
   destroy(): void;
+  /** Swap in a newer body (a remote change) without remounting; keeps the selection where it can. */
+  replaceBody(md: string): void;
   /** Apply a formatting action (rich mode; a no-op in source mode). */
   format(kind: FormatKind): void;
 }
@@ -55,6 +57,10 @@ export function createSourceEditor(parent: HTMLElement, body: string, hooks: Edi
     getMarkdown: () => view.state.doc.toString(),
     focus: () => view.focus(),
     destroy: () => view.destroy(),
+    replaceBody: (md: string) => {
+      const sel = view.state.selection.main;
+      view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: md }, selection: { anchor: Math.min(sel.anchor, md.length), head: Math.min(sel.head, md.length) } });
+    },
     format: () => undefined,
   };
 }

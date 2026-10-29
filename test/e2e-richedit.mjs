@@ -72,6 +72,8 @@ try {
   await call(url, "write_note", { title: "Kiln", content: CORPUS });
   await call(url, "write_note", { title: "Clay notes", content: "B-mix stoneware." });
   await call(url, "write_note", { title: "kiln-shed", folder: "lab", content: "The shed." });
+  await call(url, "write_note", { title: "Styled", content: "Intro line.\n\n* alpha\n* beta\n\n| a   | b   |\n| --- | --- |\n| 1   | 2   |\n\nLast para." });
+  await call(url, "write_note", { title: "Live", content: "First paragraph.\n\nSecond paragraph." });
   await call(url, "write_note", { title: "Raw html", content: "Before<div align=\"center\">centered</div>\n\nAfter[^1]\n\n[^1]: a footnote" });
   await page.reload();
   await page.waitForSelector("#main", { state: "visible", timeout: 15000 });
@@ -176,6 +178,37 @@ try {
   await open("raw-html.md");
   await page.waitForSelector("#editor.source", { timeout: 5000 });
   check("raw HTML/footnote note opens as markdown", await page.isVisible("#modeNote"));
+
+  // 10. editing one block leaves every other block byte-identical (agents get small diffs)
+  await open("styled.md");
+  await page.waitForSelector(rich);
+  await page.locator(`${rich} p`, { hasText: "Last para." }).click();
+  await page.keyboard.press("End");
+  await page.keyboard.type(" edited");
+  await page.waitForTimeout(2200);
+  const styled = await stored("styled.md");
+  check("one-block edit: other blocks keep their exact text", styled.includes("* alpha\n* beta") && styled.includes("| a   | b   |") && styled.includes("Last para. edited"));
+
+  // 11. a remote edit to the open note shows up, and local typing merges with it
+  await open("live.md");
+  await page.waitForSelector(rich);
+  await call(url, "edit_note", { path: "live.md", operation: "append", content: "Third from an agent." });
+  await page.waitForFunction(() => /Third from an agent/.test(document.querySelector("#editor .ProseMirror")?.textContent ?? ""), null, { timeout: 8000 }).catch(() => {});
+  check("remote edit appears in the open note", /Third from an agent/.test(await page.textContent(rich)));
+  await page.locator(`${rich} p`, { hasText: "First paragraph." }).click();
+  await page.keyboard.press("End");
+  await page.keyboard.type(" Typed here.");
+  await call(url, "edit_note", { path: "live.md", operation: "append", content: "Fourth from an agent." });
+  await page.waitForTimeout(3500);
+  const live = await stored("live.md");
+  check("local typing and a concurrent agent edit both survive", live.includes("First paragraph. Typed here.") && live.includes("Fourth from an agent.") && live.includes("Third from an agent."));
+
+  // 12. "Edit markdown" is per note
+  await page.click("#moreBtn");
+  await page.click("#modeBtn");
+  await page.waitForSelector("#editor.source");
+  await open("styled.md");
+  check("switching one note to markdown leaves other notes rich", await page.isVisible(rich));
 
   // 9. phone: the Aa bar
   const phone = await ctx.newPage();

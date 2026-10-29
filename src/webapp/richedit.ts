@@ -133,8 +133,8 @@ export function createRichEditor(parent: HTMLElement, body: string, hooks: Edito
   });
 
   // Refuse notes the rich model would change (compare what both render to).
-  const baseline = editor.getMarkdown();
-  if (renderedShape(baseline) !== renderedShape(body)) {
+  let state = snapshot(editor, body);
+  if (renderedShape(state.baseline) !== renderedShape(body)) {
     editor.destroy();
     parent.innerHTML = "";
     return null;
@@ -144,14 +144,20 @@ export function createRichEditor(parent: HTMLElement, body: string, hooks: Edito
   // paragraph Tiptap adds after a trailing table on first click) is not an edit.
   editor.on("update", () => hooks.onChange());
   editor.on("blur", () => hooks.onBlur());
-  const trailingNewline = body.endsWith("\n");
 
   return {
     mode: "rich",
     getMarkdown: () => {
       const md = editor.getMarkdown();
-      if (md.trimEnd() === baseline.trimEnd()) return body;
-      return trailingNewline && !md.endsWith("\n") ? md + "\n" : md;
+      if (md.trimEnd() === state.baseline.trimEnd()) return state.body;
+      return minimalMarkdown(editor, state) ?? withTail(md, state.body);
+    },
+    replaceBody: (md: string) => {
+      const { from, to } = editor.state.selection;
+      editor.commands.setContent(md, { contentType: "markdown", emitUpdate: false });
+      const max = editor.state.doc.content.size;
+      editor.commands.setTextSelection({ from: Math.min(from, max), to: Math.min(to, max) });
+      state = snapshot(editor, md);
     },
     focus: () => editor.commands.focus(),
     destroy: () => editor.destroy(),
@@ -175,6 +181,68 @@ export function createRichEditor(parent: HTMLElement, body: string, hooks: Edito
       run[kind]();
     },
   };
+}
+
+interface Snapshot {
+  /** The note body as it was loaded (returned verbatim while nothing changed). */
+  body: string;
+  /** Tiptap's serialization of that body, to tell real edits from housekeeping. */
+  baseline: string;
+  /** Top-level blocks at load: node JSON and the exact source text (with the blank lines after it). */
+  blocks: { key: string; raw: string }[] | null;
+}
+
+/** Pair each top-level node with its source text, so unchanged blocks can be written back untouched. */
+function snapshot(editor: Editor, body: string): Snapshot {
+  const nodes = editor.getJSON().content ?? [];
+  const raws: string[] = [];
+  let lead = "";
+  for (const t of marked.lexer(body, { gfm: true })) {
+    if (t.type === "space") {
+      if (raws.length) raws[raws.length - 1] += t.raw;
+      else lead += t.raw;
+    } else raws.push(t.raw);
+  }
+  if (raws.length) raws[0] = lead + raws[0];
+  const blocks = raws.length === nodes.length ? nodes.map((n, i) => ({ key: JSON.stringify(n), raw: raws[i] })) : null;
+  return { body, baseline: editor.getMarkdown(), blocks };
+}
+
+/**
+ * Markdown for the current doc that changes only the edited blocks: an
+ * untouched block keeps its original text (bullet style, table padding),
+ * so agents and other devices see a small diff and diff3 merges cleanly.
+ * Null when the blocks can't be lined up; the caller serializes everything.
+ */
+function minimalMarkdown(editor: Editor, st: Snapshot): string | null {
+  if (!st.blocks || !editor.markdown) return null;
+  let out = "";
+  let next = 0; // original blocks are matched in order
+  let prevHit = -2;
+  for (const node of editor.getJSON().content ?? []) {
+    const key = JSON.stringify(node);
+    let hit = -1;
+    for (let i = next; i < st.blocks.length; i++) {
+      if (st.blocks[i].key === key) {
+        hit = i;
+        break;
+      }
+    }
+    // Pieces that weren't neighbours in the source need a blank line between them.
+    const piece = hit >= 0 ? st.blocks[hit].raw : editor.markdown.serialize({ type: "doc", content: [node] });
+    if (out && !(hit >= 0 && hit === prevHit + 1)) out = out.replace(/\n*$/, "\n\n");
+    out += piece;
+    if (hit >= 0) next = hit + 1;
+    prevHit = hit;
+  }
+  out = withTail(out, st.body);
+  // Safety net: it must render exactly like the full serialization.
+  return renderedShape(out) === renderedShape(editor.getMarkdown()) ? out : null;
+}
+
+/** Keep the source's trailing newlines. */
+function withTail(md: string, source: string): string {
+  return md.replace(/\n*$/, source.match(/\n*$/)![0]);
 }
 
 function setLink(editor: Editor): void {
