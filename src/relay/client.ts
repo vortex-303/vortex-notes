@@ -27,6 +27,9 @@ export interface RemoteUpdate {
   blob: Uint8Array;
 }
 
+/** The relay's page size for pulls (core.ts: `LIMIT 500`). */
+export const PULL_PAGE = 500;
+
 export class RelayClient {
   constructor(
     readonly baseUrl: string,
@@ -168,6 +171,21 @@ export class RelayClient {
       updates: { seq: number; doc: string; author: string; ts: string; blob: string }[];
     };
     return data.updates.map((u) => ({ ...u, blob: fromB64(u.blob) }));
+  }
+
+  /**
+   * Every update after `since`. The relay answers at most PULL_PAGE updates per request, so
+   * keep asking from the last seq until a short page comes back.
+   */
+  async pullAllUpdates(spaceId: string, since = 0): Promise<RemoteUpdate[]> {
+    const all: RemoteUpdate[] = [];
+    let from = since;
+    for (;;) {
+      const page = await this.pullUpdates(spaceId, from);
+      all.push(...page);
+      if (page.length < PULL_PAGE) return all;
+      from = page[page.length - 1].seq;
+    }
   }
 
   /** A signed subscribe frame for the live-sync WebSocket (proves membership). */

@@ -192,7 +192,7 @@ export async function syncVault(vault: Vault): Promise<SyncResult> {
   const result: SyncResult = { pulled: 0, pushed: 0, conflicts: [] };
 
   // ---- pull ----
-  const updates = await client.pullUpdates(state.spaceId, state.cursor);
+  const updates = await client.pullAllUpdates(state.spaceId, state.cursor);
   // Only the newest update per doc matters in LWW.
   const latest = new Map<string, (typeof updates)[number]>();
   for (const u of updates) latest.set(u.doc, u);
@@ -280,8 +280,9 @@ export async function syncVault(vault: Vault): Promise<SyncResult> {
     if (state.files[rel] === h) continue;
     const payload: DocPayload = { v: 1, path: rel, content, mtimeMs: fs.statSync(vault.abs(rel)).mtimeMs };
     const blob = encryptPayload(key, utf8(JSON.stringify(payload)), `vortex-doc-v1:${rel}`);
-    const seq = await client.pushUpdate(state.spaceId, rel, blob);
-    state.cursor = Math.max(state.cursor, seq);
+    // The cursor only ever moves on what we pulled: jumping it to our own seq would skip any
+    // other device's update that landed in between. Our pushes come back as echoes and are skipped.
+    await client.pushUpdate(state.spaceId, rel, blob);
     state.files[rel] = h;
     writeBase(vault, rel, content);
     result.pushed++;
@@ -293,8 +294,7 @@ export async function syncVault(vault: Vault): Promise<SyncResult> {
     if (onDisk.has(rel)) continue;
     const payload: DocPayload = { v: 1, path: rel, content: "", mtimeMs: Date.now(), deleted: true };
     const blob = encryptPayload(key, utf8(JSON.stringify(payload)), `vortex-doc-v1:${rel}`);
-    const seq = await client.pushUpdate(state.spaceId, rel, blob);
-    state.cursor = Math.max(state.cursor, seq);
+    await client.pushUpdate(state.spaceId, rel, blob);
     delete state.files[rel];
     deleteBase(vault, rel);
     result.pushed++;

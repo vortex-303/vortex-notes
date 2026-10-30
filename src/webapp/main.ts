@@ -296,7 +296,7 @@ async function autoUnlock(): Promise<boolean> {
 // ---------- sync ----------
 async function refresh(): Promise<void> {
   if (!client || !spaceKey || !spaceId) return;
-  const updates = await client.pullUpdates(spaceId, cursor);
+  const updates = await client.pullAllUpdates(spaceId, cursor);
   let changedCurrent = false;
   for (const u of updates) {
     cursor = Math.max(cursor, u.seq);
@@ -330,8 +330,9 @@ async function pushNote(path: string, content: string): Promise<void> {
   if (!client || !spaceKey || !spaceId) throw new Error("Locked.");
   const payload: DocPayload = { v: 1, path, content, mtimeMs: Date.now() };
   const blob = encryptPayload(spaceKey, utf8(JSON.stringify(payload)), `vortex-doc-v1:${path}`);
-  const seq = await client.pushUpdate(spaceId, path, blob);
-  cursor = Math.max(cursor, seq);
+  // Don't move the cursor to our own seq: another device's update may sit just below it.
+  // Our push comes back on the next pull and is applied as a no-op.
+  await client.pushUpdate(spaceId, path, blob);
   notes.set(path, payload);
 }
 

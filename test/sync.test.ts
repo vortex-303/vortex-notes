@@ -312,3 +312,78 @@ test("sync: concurrent edits produce a conflict file, newest wins in place", asy
     await relay.close();
   }
 });
+
+// Regression: pushing used to move the cursor to our own new seq, skipping any
+// other device's update that landed between our pull and our push.
+test("sync: an update that lands between our pull and our push is not skipped", async () => {
+  const { RelayClient } = await import("../src/relay/client.js");
+  const relay = await startRelay({ port: 0 });
+  const base = `http://127.0.0.1:${relay.port}`;
+  const a = newHome();
+  const b = newHome();
+  try {
+    const va = freshVault();
+    const vb = freshVault();
+    const phrase = await as(a, async () => {
+      const { phrase } = initIdentity("a");
+      await linkVault(va, base, "personal");
+      await syncVault(va);
+      return phrase;
+    });
+    await as(b, async () => {
+      loginIdentity(phrase, "b");
+      await joinVault(vb, base, phrase);
+      await syncVault(vb);
+      vb.writeNote("from-b.md", "From B", "B wrote this while A was syncing.");
+    });
+    // A has a local edit; just before A's push reaches the relay, B's sync lands.
+    va.writeNote("from-a.md", "From A", "A's own note.");
+    const push = RelayClient.prototype.pushUpdate;
+    let raced = false;
+    RelayClient.prototype.pushUpdate = async function (...args: Parameters<typeof push>) {
+      if (!raced) {
+        raced = true;
+        await as(b, () => syncVault(vb));
+      }
+      return push.apply(this, args);
+    };
+    try {
+      await as(a, () => syncVault(va));
+    } finally {
+      RelayClient.prototype.pushUpdate = push;
+    }
+    assert.ok(raced);
+    await as(a, () => syncVault(va));
+    assert.ok(fs.existsSync(va.abs("from-b.md")), "A receives B's note on its next sync");
+  } finally {
+    await relay.close();
+  }
+});
+
+// The relay pages pulls at 500 updates; a sync must keep pulling until it has them all.
+test("sync: pulls past the relay's 500-update page", async () => {
+  const relay = await startRelay({ port: 0 });
+  const base = `http://127.0.0.1:${relay.port}`;
+  const a = newHome();
+  const b = newHome();
+  try {
+    const va = freshVault();
+    const vb = freshVault();
+    const phrase = await as(a, async () => {
+      const { phrase } = initIdentity("a");
+      for (let i = 0; i < 620; i++) va.writeNote(`bulk/n${i}.md`, `N${i}`, `note ${i}`);
+      await linkVault(va, base, "personal");
+      const r = await syncVault(va);
+      assert.equal(r.pushed, 620);
+      return phrase;
+    });
+    await as(b, async () => {
+      loginIdentity(phrase, "b");
+      await joinVault(vb, base, phrase);
+      const r = await syncVault(vb);
+      assert.equal(r.pulled, 620, "every note arrives in one sync");
+    });
+  } finally {
+    await relay.close();
+  }
+});
