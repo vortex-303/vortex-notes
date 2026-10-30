@@ -81,6 +81,12 @@ public struct RelayClient: Sendable {
         }
     }
 
+    /// Permanently delete this account and everything the relay holds for it
+    /// (spaces, encrypted notes, public pages, devices, agents, chat connectors).
+    public func deleteAccount() async throws {
+        _ = try await send("DELETE", "/v1/account", body: .object([("confirm", .string("delete my account"))]))
+    }
+
     public func usage() async throws -> (bytesUsed: Int64, quotaBytes: Int64?) {
         let res = try await send("GET", "/v1/usage")
         return (res["bytesUsed"]?.int ?? 0, res["quotaBytes"]?.int)

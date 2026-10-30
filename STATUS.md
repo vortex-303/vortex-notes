@@ -138,21 +138,41 @@ committed yet (it shows as untracked); commit it separately from web work. Plans
   - The native apps can't point at a self-host (Settings shows the relay read-only). That's for the `ios/` work.
   - The quota message says "or upgrade" even on self-hosts.
 
+**Done 2026-10-30 (this session):**
+- Committed `ios/` + interop + STATUS (`8583782`).
+- **Sync fixes** (`39d318b`):
+  - The CLI and web no longer move the cursor on their own pushes (that skipped another device's update landing in between).
+  - Both pull every page past the relay's 500 limit (`RelayClient.pullAllUpdates`).
+  - Tests in `test/sync.test.ts`.
+- **Account deletion:**
+  - Relay `DELETE /v1/account` (device only, body `{"confirm":"delete my account"}`).
+  - Web: Account & recovery → Delete my account (type "delete").
+  - iPhone/Mac: Settings → Delete Account… (confirmation dialog).
+  - `/privacy` and `/terms` updated.
+  - Tests: `test/hostedmcp.test.ts`, `test/e2e-delete-account.mjs`, `ios/App/UITests/DeleteAccountUITests.swift` (the relay is empty afterwards).
+  - Needs a deploy plus a new DMG and iPhone build to be live.
+
 **Start a new session here (next steps, in order):**
-0. Ask the user whether to **commit `ios/`** (+ the three mixed site files and STATUS.md) now; the other session's notes ask the same.
-1. **Claude MCP connector listing** (not submitted yet): claude.ai/directory/manage → Submit new → MCP connector →
-   `https://vortex-notes.pages.dev/mcp`. Answers: `launch/directory-submissions.md` / https://claude.ai/artifact/A4eKQ8bWhzoGr2Joj6CNwV.
-2. **Claude plugin:** publish is requested and it's waiting for an Anthropic reviewer (claude.ai/directory/manage/plugins/7a31fc8a-3f05-4c15-be23-bf12ce189f03).
-   Nothing to do unless the reviewer asks. Optional: "Set up push updates" (GitHub webhook).
-3. ~~Favicon / funnel everywhere~~ DONE (web, PWA, ChatGPT assets, iOS/Mac app icons, in-app logo, menu bar).
-   Regenerate with `node design/icons/brand.mjs`. Check whether claude.ai now shows the funnel on the connectors (it may cache).
-4. **ChatGPT app:** the user verifies their OpenAI org and records a 1–2 minute demo video. Then:
-   - put the URL in `plugins/chatgpt/plugin.json`
-   - `wrangler secret put OPENAI_APPS_CHALLENGE` with the portal's token, then deploy
-   - `scripts/build-chatgpt-plugin.sh`, then upload the ZIP
-5. Coordinate with the other session (native apps, `ios/`): it owns `ios/` and its uncommitted `landing.ts` / `edge.ts` / `build-cf.mjs` / `STATUS.md` changes.
-   Its open items: account deletion (an App Store blocker; relay `DELETE /v1/account` + web + apps; `/privacy` currently promises deletion on request), iPhone capture surfaces (share sheet, Shortcuts, widgets), TestFlight.
-6. Ideas the user raised but didn't schedule: a native rich editor parity check (Mac/iPhone vs web), and the hands-on field test (`TESTING.md`; the artifact checklist).
+1. **If not yet live:**
+   - deploy (`npm run cf:deploy`, when the user says "deploy")
+   - rebuild the DMG (`VORTEX_NOTARY_PROFILE=vortex-notary /Users/n/vortex-notes/ios/scripts/mac-dmg.sh` → `site-downloads/` → shasum → deploy)
+   - reinstall the iPhone build
+2. **Deferred by the user (do when they ask):**
+   - the Claude MCP connector listing (kit: `launch/directory-submissions.md`)
+   - the ChatGPT app (org verification + demo video + `OPENAI_APPS_CHALLENGE`)
+   - the 42-step field test (`TESTING.md`)
+   - The Claude plugin is waiting for Anthropic review (nothing to do).
+3. **Next product steps (the user chose these, in this order):**
+   1. **Unlock password-protected notes in the native apps.** They show "coming soon". Port `notelock.ts` (v1/v2 envelopes) to VortexKit with interop vectors.
+   2. **Backups/export:**
+      - web "Export all notes (.zip)"
+      - confirm Cloudflare DO point-in-time recovery for the relay and document a restore
+   3. **Monetization:** the ~$6/mo tier (hosted sync and connectors beyond the free 50MB). Nothing exists yet: billing, quota per plan.
+   4. **Launch push** (Show HN / post) once the directory listings are live.
+4. Smaller known items:
+   - the native apps can't point at a self-host (Settings shows the relay read-only)
+   - the quota message says "or upgrade" on self-hosts
+   - native file names can be NFD (Swift matches NFC)
 
 **Live:**
 - **OAuth sign-in on one shared `/mcp` URL** (`src/relay/oauth.ts`). The relay is its own OAuth 2.1 server:

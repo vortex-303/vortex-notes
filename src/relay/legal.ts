@@ -5,7 +5,7 @@
  */
 import { FAVICON_HREF } from "./brand.js";
 
-const UPDATED = "2026-10-29";
+const UPDATED = "2026-10-30";
 const ISSUES = "https://github.com/vortex-303/vortex-notes/issues";
 
 const HOSTED = "https://vortex-notes.pages.dev";
@@ -88,11 +88,12 @@ may process connection details such as IP addresses to operate and protect its n
 third-party services.</p>
 
 <h2>How long we keep it</h2>
-<p>Encrypted notes and account records stay until you delete them or ask us to delete your account.
+<p>Encrypted notes and account records stay until you delete them or delete your account.
 Sign-in requests and codes expire within minutes, access tokens after an hour, and refresh tokens after 30 days
-unless used. To delete your account and everything stored for it, open a request at
-<a href="${ISSUES}">our support page</a> with your Account ID (shown under Account &amp; recovery); please don't
-post your 12 words. We delete it within 30 days.</p>
+unless used. <strong>To delete your account</strong> and everything stored for it (notes, spaces, public pages,
+devices, agents, chat connectors), use <em>Account &amp; recovery → Delete my account</em> in the web app, or
+<em>Settings → Delete Account</em> in the iPhone or Mac app. It takes effect immediately. If you can't sign in,
+open a request at <a href="${ISSUES}">our support page</a> with your Account ID; please don't post your 12 words.</p>
 
 <h2>Your 12 words</h2>
 <p>Your recovery phrase is your account. We never ask for it, and nobody from Vortex Notes will. Because we don't
@@ -125,7 +126,7 @@ under the MIT license; you can run your own server instead.</p>
 until you unpublish them.</p>
 
 <h2>Ending use</h2>
-<p>You can stop using the service at any time and ask us to delete your account (see the <a href="/privacy">privacy policy</a>).
+<p>You can stop using the service at any time and delete your account from the app (see the <a href="/privacy">privacy policy</a>).
 We may suspend accounts that break these terms.</p>
 
 <h2>Liability</h2>

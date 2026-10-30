@@ -5,6 +5,9 @@ struct SettingsView: View {
     @Environment(AppModel.self) private var model
     @State private var usage: (Int64, Int64?)?
     @State private var confirmSignOut = false
+    @State private var confirmDelete = false
+    @State private var deleteError: String?
+    @State private var deleting = false
 
     var body: some View {
         Form {
@@ -48,12 +51,36 @@ struct SettingsView: View {
             } footer: {
                 Text("Removes this device's keys and its copy of your notes. Notes stay safe on your other devices. You'll need your 12 words to sign in again.")
             }
+            Section {
+                Button(deleting ? "Deleting…" : "Delete Account…", role: .destructive) { confirmDelete = true }
+                    .disabled(deleting)
+                    .accessibilityIdentifier("deleteAccount")
+            } footer: {
+                Text(deleteError ?? "Permanently deletes your notes, devices, agents and chat connectors from the server, on every device. This can't be undone.")
+                    .foregroundStyle(deleteError == nil ? Color.secondary : Color.red)
+            }
         }
         .formStyle(.grouped)
         .navigationTitle("Settings")
         .task { usage = await model.usage() }
         .confirmationDialog("Sign out of this device?", isPresented: $confirmSignOut, titleVisibility: .visible) {
             Button("Sign out", role: .destructive) { model.signOut() }
+        }
+        .confirmationDialog("Delete your account and all of your notes?", isPresented: $confirmDelete, titleVisibility: .visible) {
+            Button("Delete Account", role: .destructive) {
+                deleting = true
+                deleteError = nil
+                Task {
+                    do {
+                        try await model.deleteAccount()
+                    } catch {
+                        deleteError = "Couldn't delete the account: \(error.localizedDescription). Nothing was removed; try again when you're online."
+                    }
+                    deleting = false
+                }
+            }
+        } message: {
+            Text("Everything on the server is removed for good, on every device. Your 12 words will no longer open any notes.")
         }
     }
 

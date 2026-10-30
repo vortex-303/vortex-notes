@@ -114,6 +114,14 @@ final class AppModel {
         phase = .onboarding
     }
 
+    /// Delete the account on the server (every note, device, agent and connector), then forget
+    /// it on this device. Throws if the server refuses, so the UI can say so and keep the account.
+    func deleteAccount() async throws {
+        guard let identity = session?.identity else { return }
+        try await RelayClient(baseURL: relayURL, identity: identity).deleteAccount()
+        signOut()
+    }
+
     private func persist(_ s: Session) throws {
         guard Keychain.save(s.identity.serialized()) else { throw AppError.keychain }
         try store.wipe() // a different account must never see the previous one's notes

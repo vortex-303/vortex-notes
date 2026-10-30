@@ -139,6 +139,12 @@ export class RelayClient {
     return (await res.json()) as { token: string; path: string };
   }
 
+  /** Permanently delete this account and everything the relay holds for it. */
+  async deleteAccount(): Promise<{ deleted: Record<string, number> }> {
+    const res = await ok(await this.signed("DELETE", "/v1/account", { confirm: "delete my account" }));
+    return (await res.json()) as { deleted: Record<string, number> };
+  }
+
   /** After the user approves a chat app's sign-in: bind the new connector to that request. */
   async approveOAuth(request: string, connector: string): Promise<{ redirect: string }> {
     const res = await ok(await this.signed("POST", "/v1/oauth/approve", { request, connector }));

@@ -22,7 +22,7 @@
     "build:web": "esbuild src/webapp/main.ts --bundle --minify --format=iife --platform=browser --outfile=dist/webapp/bundle.js",
     "prepublishOnly": "npm run build",
     "build:assets": "mkdir -p dist/assets/icons dist/assets/geo && cp assets/demo.svg dist/assets/demo.svg && cp assets/icons/*.png dist/assets/icons/ && cp assets/geo/country.mmdb dist/assets/geo/",
-    "test:e2e": "npm run build && node test/e2e-webapp.mjs && node test/e2e-lock.mjs && node test/e2e-public.mjs && node test/e2e-usermenu.mjs && node test/e2e-session.mjs && node test/e2e-connector.mjs && node test/e2e-landing.mjs && node test/e2e-oauth.mjs && node test/e2e-richedit.mjs",
+    "test:e2e": "npm run build && node test/e2e-webapp.mjs && node test/e2e-lock.mjs && node test/e2e-public.mjs && node test/e2e-usermenu.mjs && node test/e2e-session.mjs && node test/e2e-connector.mjs && node test/e2e-landing.mjs && node test/e2e-oauth.mjs && node test/e2e-richedit.mjs && node test/e2e-delete-account.mjs",
     "build:cf": "npm run build && node scripts/build-cf.mjs",
     "cf:dev": "npm run build:cf && cd deploy/cf && npx wrangler dev --env dev --port 8788",
     "cf:deploy": "npm run build:cf && cd deploy/cf && npx wrangler deploy --env= && cd pages && npx wrangler pages deploy --project-name vortex-notes --branch main --commit-dirty=true"

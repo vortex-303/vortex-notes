@@ -1755,6 +1755,31 @@ adminOverlay.addEventListener("click", (e) => { if (e.target === adminOverlay) a
 
 $("#refreshBtn").addEventListener("click", () => void refresh().catch((e) => alert((e as Error).message)));
 $("#filter").addEventListener("input", (e) => renderList((e.target as HTMLInputElement).value.trim().toLowerCase()));
+// --- delete the account (Account & recovery) ---
+($("#delAcctConfirm") as HTMLInputElement).addEventListener("input", (e) => {
+  ($("#delAcctBtn") as HTMLButtonElement).disabled = (e.target as HTMLInputElement).value.trim().toLowerCase() !== "delete";
+});
+$("#delAcctBtn").addEventListener("click", () => {
+  if (!client) return;
+  ($("#delAcctBtn") as HTMLButtonElement).disabled = true;
+  $("#delAcctStatus").textContent = "Deleting…";
+  void client
+    .deleteAccount()
+    .then(() => {
+      sessionPhrase = "";
+      sessionKeys.clear();
+      for (const k of ["vn-device", "vn-authorname"]) localStorage.removeItem(k);
+      clearInterval(pollTimer);
+      stopLiveSync();
+      $("#delAcctStatus").textContent = "Your account and everything on this server are deleted.";
+      window.setTimeout(() => location.reload(), 1500);
+    })
+    .catch((e) => {
+      ($("#delAcctBtn") as HTMLButtonElement).disabled = false;
+      $("#delAcctStatus").textContent = "Couldn't delete: " + (e as Error).message;
+    });
+});
+
 $("#lockBtn").addEventListener("click", () => {
   if (!confirm("Sign out on this device? You'll need your recovery phrase to sign back in.")) return;
   sessionPhrase = "";

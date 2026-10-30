@@ -580,6 +580,26 @@ export function createRelayCore(opts: RelayCoreOptions): RelayCore {
       );
       return json(200, { token, path: `/mcp/${token}` });
     }
+    // Delete the whole account: its spaces and every encrypted update in them, public notes,
+    // chat connectors (and their OAuth tokens), every device and agent, usage and admin tags.
+    // Only a device of the account can do it (not an agent), and the body must say so explicitly.
+    if (route === "DELETE /v1/account") {
+      if (isAgent) return json(403, { error: "Agents cannot delete the account" });
+      if (parse(body).confirm !== "delete my account") return json(400, { error: 'Send {"confirm":"delete my account"}' });
+      const spaces = db.all<{ id: string }>("SELECT id FROM spaces WHERE account=?", account).map((r) => r.id);
+      let updates = 0;
+      for (const id of spaces) {
+        updates += db.all("DELETE FROM updates WHERE space=? RETURNING seq", id).length;
+        db.run("DELETE FROM spaces WHERE id=?", id);
+      }
+      for (const c of db.all<{ token: string }>("SELECT token FROM connectors WHERE account=?", account)) oauth.forgetConnector(c.token);
+      const connectors = db.all("DELETE FROM connectors WHERE account=? RETURNING token", account).length;
+      const publicNotes = db.all("DELETE FROM public_notes WHERE account=? RETURNING slug", account).length;
+      const principals = db.all("DELETE FROM devices WHERE account=? RETURNING signPub", account).length;
+      db.run("DELETE FROM accounts WHERE account=?", account);
+      db.run("DELETE FROM admin_tags WHERE account=?", account);
+      return json(200, { ok: true, deleted: { spaces: spaces.length, updates, connectors, publicNotes, principals } });
+    }
     if (route === "POST /v1/oauth/approve") {
       if (isAgent) return json(403, { error: "Agents cannot approve sign-ins" });
       const b = parse(body);

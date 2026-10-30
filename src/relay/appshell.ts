@@ -540,6 +540,13 @@ export function appShell(_nonce: string): string {
       <button id="rotGo" class="pairgo" disabled>${icon("check")} Re-key my account</button>
       <div id="rotStatus" class="tipsfoot"></div>
     </div>
+    <div class="acctlabel" style="margin-top:1rem">Delete my account</div>
+    <p class="tipsfoot">Permanently deletes your notes, spaces, public pages, devices, agents and chat
+    connectors from this server. Copies already on your computers (the CLI's folder of markdown) stay there.
+    This can't be undone.</p>
+    <input id="delAcctConfirm" class="chatinput" placeholder="Type delete to confirm" autocomplete="off" autocapitalize="off">
+    <button id="delAcctBtn" class="pairgo" style="background:var(--danger)" disabled>${icon("trash")} Delete my account</button>
+    <div id="delAcctStatus" class="tipsfoot"></div>
   </div>
 </div>
 <div id="pairOverlay" hidden>

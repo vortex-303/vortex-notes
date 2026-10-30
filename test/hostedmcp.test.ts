@@ -290,3 +290,46 @@ test("self-host: relay settings come from the environment (as `vortex-notes rela
   assert.equal(relayOptionsFromEnv({}).connectorKek, undefined);
   assert.throws(() => relayOptionsFromEnv({ RELAY_CONNECTOR_KEK: "short" }), /64 hex/);
 });
+
+// App Store requirement and the privacy page's promise: an account can delete itself.
+test("account deletion removes every row the relay holds for the account", async () => {
+  const dbPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "vortex-delete-")), "relay.db");
+  const relay = await startRelay({ port: 0, dbPath, connectorKek: randomKey() });
+  const base = `http://127.0.0.1:${relay.port}`;
+  const prevHome = process.env.VORTEX_NOTES_HOME;
+  process.env.VORTEX_NOTES_HOME = fs.mkdtempSync(path.join(os.tmpdir(), "vortex-delete-home-"));
+  try {
+    initIdentity("owners-mac");
+    const vault = new Vault(fs.mkdtempSync(path.join(os.tmpdir(), "vortex-delete-vault-")));
+    vault.init();
+    vault.writeNote("secret.md", "Secret", "launch code is 4417");
+    await linkVault(vault, base, "personal");
+    await syncVault(vault);
+    const spaceId = loadSyncState(vault)!.spaceId;
+    const { url, client } = await createCloudAgent(base, spaceId, "rw");
+    const account = loadIdentity().file.accountSignPub;
+
+    // An explicit confirmation is required.
+    const unconfirmed = await fetch(`${base}/v1/account`, { method: "DELETE" });
+    assert.equal(unconfirmed.status, 401, "unsigned requests never reach it");
+
+    const { deleted } = await client.deleteAccount();
+    assert.ok(deleted.updates >= 1 && deleted.spaces === 1 && deleted.connectors === 1 && deleted.principals >= 2);
+
+    // Nothing left for the account, the connector URL is dead, the device can't sign in.
+    assert.equal((await fetch(url, { method: "POST", body: "{}" })).status, 404);
+    await assert.rejects(() => client.listSpaces());
+    const db = new Database(dbPath, { readonly: true });
+    const count = (q: string, ...p: unknown[]) => (db.prepare(q).get(...p) as { n: number }).n;
+    assert.equal(count("SELECT COUNT(*) n FROM devices WHERE account=?", account), 0);
+    assert.equal(count("SELECT COUNT(*) n FROM spaces WHERE account=?", account), 0);
+    assert.equal(count("SELECT COUNT(*) n FROM updates WHERE space=?", spaceId), 0);
+    assert.equal(count("SELECT COUNT(*) n FROM connectors WHERE account=?", account), 0);
+    assert.equal(count("SELECT COUNT(*) n FROM accounts WHERE account=?", account), 0);
+    assert.equal(count("SELECT COUNT(*) n FROM oauth_tokens"), 0);
+    db.close();
+  } finally {
+    process.env.VORTEX_NOTES_HOME = prevHome;
+    await relay.close();
+  }
+});
