@@ -150,13 +150,10 @@ committed yet (it shows as untracked); commit it separately from web work. Plans
   - iPhone/Mac: Settings → Delete Account… (confirmation dialog).
   - `/privacy` and `/terms` updated.
   - Tests: `test/hostedmcp.test.ts`, `test/e2e-delete-account.mjs`, `ios/App/UITests/DeleteAccountUITests.swift` (the relay is empty afterwards).
-  - Needs a deploy plus a new DMG and iPhone build to be live.
+  - Live on prod and in the apps.
 
 **Start a new session here (next steps, in order):**
-1. **If not yet live:**
-   - deploy (`npm run cf:deploy`, when the user says "deploy")
-   - rebuild the DMG (`VORTEX_NOTARY_PROFILE=vortex-notary /Users/n/vortex-notes/ios/scripts/mac-dmg.sh` → `site-downloads/` → shasum → deploy)
-   - reinstall the iPhone build
+1. ~~Make it live~~ DONE 2026-10-30: deployed, account deletion verified on prod (e2e 7/7), Mac DMG `19e382a9…` live, iPhone build installed.
 2. **Deferred by the user (do when they ask):**
    - the Claude MCP connector listing (kit: `launch/directory-submissions.md`)
    - the ChatGPT app (org verification + demo video + `OPENAI_APPS_CHALLENGE`)
