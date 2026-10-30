@@ -163,9 +163,35 @@ final class AppModel {
 
     func sortedNotes(_ sort: NoteSort) -> [NoteRow] {
         notes.sorted { a, b in
+            if sort == .name {
+                let c = a.title.localizedStandardCompare(b.title)
+                return c != .orderedSame ? c == .orderedAscending : a.path < b.path
+            }
             let (x, y) = sort == .created ? (a.createdMs, b.createdMs) : (a.mtimeMs, b.mtimeMs)
             return x != y ? x > y : a.path < b.path
         }
+    }
+
+    /// "projects/kiln/plan.md" → "projects/kiln"; a note at the top level has no folder ("").
+    static func folder(of path: String) -> String {
+        path.lastIndex(of: "/").map { String(path[..<$0]) } ?? ""
+    }
+
+    /// Notes grouped under their folder (already sorted notes keep their order inside a group).
+    /// Top-level notes first, then folders A–Z, as in the web app's sidebar.
+    static func folderGroups(_ notes: [NoteRow]) -> [(folder: String, notes: [NoteRow])] {
+        var order: [String] = []
+        var groups: [String: [NoteRow]] = [:]
+        for n in notes {
+            let f = folder(of: n.path)
+            if groups[f] == nil { order.append(f) }
+            groups[f, default: []].append(n)
+        }
+        let sorted = order.sorted { a, b in
+            if a.isEmpty != b.isEmpty { return a.isEmpty }
+            return a.localizedStandardCompare(b) == .orderedAscending
+        }
+        return sorted.map { ($0, groups[$0]!) }
     }
 
     /// Pinned notes that still exist, in pin order.

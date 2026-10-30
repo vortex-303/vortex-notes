@@ -2,16 +2,30 @@ import SwiftUI
 import VortexKit
 
 enum NoteSort: String, CaseIterable, Identifiable {
-    case modified, created
+    case modified, created, name
     var id: String { rawValue }
-    var label: String { self == .modified ? "Last modified" : "Date created" }
+    var label: String {
+        switch self {
+        case .modified: "Date modified"
+        case .created: "Date created"
+        case .name: "Name"
+        }
+    }
 }
 
-/// All notes, newest first (by modification or creation), pinned notes on top.
+/// How the list is laid out: one list of every note, or every note grouped under its folder (as on the web).
+enum NoteLayout: String, CaseIterable, Identifiable {
+    case list, folders
+    var id: String { rawValue }
+    var label: String { self == .list ? "All notes" : "By folder" }
+}
+
+/// Every note (pinned ones on top), as one list or grouped by folder.
 struct NotesListView: View {
     @Environment(AppModel.self) private var model
     var selection: Binding<String?>? = nil
     @AppStorage("noteSort") private var sort: NoteSort = .modified
+    @AppStorage("noteLayout") private var layout: NoteLayout = .list
 
     var body: some View {
         let pinned = model.pinnedNotes
@@ -26,10 +40,21 @@ struct NotesListView: View {
                     ForEach(pinned, id: \.path) { row($0, pinned: true) }
                 }
             }
-            Section {
-                ForEach(others, id: \.path) { row($0, pinned: false) }
-            } header: {
-                if !pinned.isEmpty { Text(sort.label) }
+            if layout == .folders {
+                ForEach(AppModel.folderGroups(others), id: \.folder) { group in
+                    Section {
+                        ForEach(group.notes, id: \.path) { row($0, pinned: false) }
+                    } header: {
+                        Label(group.folder.isEmpty ? "No folder" : group.folder, systemImage: group.folder.isEmpty ? "tray" : "folder")
+                            .accessibilityIdentifier("folder:\(group.folder)")
+                    }
+                }
+            } else {
+                Section {
+                    ForEach(others, id: \.path) { row($0, pinned: false) }
+                } header: {
+                    if !pinned.isEmpty { Text(sort.label) }
+                }
             }
         }
         .refreshable { await model.sync() }
@@ -40,12 +65,17 @@ struct NotesListView: View {
             }
             ToolbarItem {
                 Menu {
+                    Picker("View", selection: $layout) {
+                        Label(NoteLayout.list.label, systemImage: "list.bullet").tag(NoteLayout.list)
+                        Label(NoteLayout.folders.label, systemImage: "folder").tag(NoteLayout.folders)
+                    }
                     Picker("Sort by", selection: $sort) {
                         ForEach(NoteSort.allCases) { Text($0.label).tag($0) }
                     }
                 } label: {
-                    Label("Sort", systemImage: "arrow.up.arrow.down")
+                    Label("View and sort", systemImage: "arrow.up.arrow.down")
                 }
+                .accessibilityIdentifier("viewMenu")
             }
         }
     }
@@ -54,9 +84,9 @@ struct NotesListView: View {
     private func row(_ note: NoteRow, pinned: Bool) -> some View {
         Group {
             if selection == nil {
-                NavigationLink(value: note.path) { NoteRowView(note: note, pinned: pinned, sort: sort) }
+                NavigationLink(value: note.path) { NoteRowView(note: note, pinned: pinned, sort: sort, showFolder: layout == .list || pinned) }
             } else {
-                NoteRowView(note: note, pinned: pinned, sort: sort).tag(note.path)
+                NoteRowView(note: note, pinned: pinned, sort: sort, showFolder: layout == .list || pinned).tag(note.path)
             }
         }
         .contextMenu { PinButton(path: note.path) }
@@ -87,10 +117,19 @@ struct NoteRowView: View {
     let note: NoteRow
     var pinned = false
     var sort: NoteSort = .modified
+    /// The small folder tag above the title (in the flat list; the folder view has headers instead).
+    var showFolder = true
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {
+                if showFolder, !folder.isEmpty {
+                    Label(folder, systemImage: "folder")
+                        .labelStyle(.titleAndIcon)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
                 Text(note.title).lineLimit(1)
                 Text(Self.snippet(note.content)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 Text(meta).font(.caption2).foregroundStyle(.tertiary).lineLimit(1)
@@ -108,11 +147,11 @@ struct NoteRowView: View {
         }
     }
 
+    private var folder: String { AppModel.folder(of: note.path) }
+
     private var meta: String {
         let date = Date(timeIntervalSince1970: Double(sort == .created ? note.createdMs : note.mtimeMs) / 1000)
-        let when = date.formatted(.relative(presentation: .named))
-        let folder = note.path.contains("/") ? String(note.path[..<note.path.lastIndex(of: "/")!]) : ""
-        return folder.isEmpty ? when : "\(folder) · \(when)"
+        return date.formatted(.relative(presentation: .named))
     }
 
     static func snippet(_ content: String) -> String {
