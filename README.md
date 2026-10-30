@@ -151,11 +151,25 @@ model download).
 The hosted relay at `vortex-notes.pages.dev` is convenience, not lock-in. Run your own:
 
 ```sh
-vortex-notes identity init                       # your 12 words — shown once
-vortex-notes relay --port 7300 --db relay.db     # the ciphertext store + web app
-vortex-notes sync link --relay <url> --space personal
-vortex-notes sync                                # and on another machine: sync join
+vortex-notes relay --port 7300 --db ~/relay.db   # the ciphertext store, web app and chat connectors
+vortex-notes setup --relay http://<host>:7300    # on each computer: your 12 words, then sync
+npx -y vortex-notes@latest pair --relay http://<host>:7300   # an agent machine
 ```
+
+Open `http://<host>:7300/app` to create an account in the browser.
+
+- **Your data is the `--db` file** (default `~/.vortex-notes/relay.db`). Back it up.
+  `--db :memory:` is for throwaway tests.
+- **Chat apps (Claude, ChatGPT):**
+  - Set `RELAY_CONNECTOR_KEK` to 64 hex characters (`openssl rand -hex 32`) before creating connectors,
+    so their keys are encrypted at rest.
+  - Serve the relay over HTTPS (Caddy, nginx, or a tunnel): the chat apps can't reach `localhost`.
+  - OAuth discovery follows the `Host` / `X-Forwarded-Host` headers, so a reverse proxy just works.
+- **Other settings:**
+  - `RELAY_QUOTA_MB` caps each account's storage.
+  - `RELAY_ADMIN_ACCOUNT` (your Account ID) turns on admin stats in the web app.
+- **Native apps:** the Mac and iPhone apps use the hosted relay for now. The CLI, agents and the
+  web app work with any relay.
 
 ## How the encryption works
 

@@ -26,7 +26,7 @@ import { appShell } from "./appshell.js";
 import { marked } from "marked";
 import { createHostedMcp } from "./hostedmcp.js";
 import { llmsTxt } from "./llmstxt.js";
-import { createOAuth, corsHeaders } from "./oauth.js";
+import { createOAuth, corsHeaders, publicOrigin } from "./oauth.js";
 import { privacyPage, termsPage } from "./legal.js";
 import { FAVICON_ICO_B64 } from "./brand.js";
 
@@ -305,8 +305,8 @@ export function createRelayCore(opts: RelayCoreOptions): RelayCore {
     if (route === "GET /favicon.ico") {
       return new Response(fromB64(FAVICON_ICO_B64) as Uint8Array<ArrayBuffer>, { headers: { "Content-Type": "image/x-icon", "Cache-Control": "public, max-age=86400" } });
     }
-    if (route === "GET /privacy") return html(200, privacyPage(), { "Cache-Control": "public, max-age=3600" });
-    if (route === "GET /terms") return html(200, termsPage(), { "Cache-Control": "public, max-age=3600" });
+    if (route === "GET /privacy") return html(200, privacyPage(publicOrigin(req, url)), { "Cache-Control": "public, max-age=3600" });
+    if (route === "GET /terms") return html(200, termsPage(publicOrigin(req, url)), { "Cache-Control": "public, max-age=3600" });
     if (route === "GET /.well-known/openai-apps-challenge" && opts.openaiAppsChallenge) {
       return new Response(opts.openaiAppsChallenge, { headers: { "Content-Type": "text/plain; charset=utf-8" } });
     }
@@ -329,7 +329,7 @@ export function createRelayCore(opts: RelayCoreOptions): RelayCore {
 
     if (route === "GET /") {
       const nonce = toB64(randomBytes(16));
-      return html(200, landingShell(nonce), {
+      return html(200, landingShell(nonce, publicOrigin(req, url)), {
         "Content-Security-Policy": "default-src 'none'; script-src 'nonce-" + nonce + "'; style-src 'unsafe-inline'; img-src 'self' data:",
       });
     }

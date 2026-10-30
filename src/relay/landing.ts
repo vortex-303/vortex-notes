@@ -1,28 +1,19 @@
 /** The landing/docs page served at the relay root ("/"). Static, self-contained. */
 import { icon } from "../icons.js";
+import { MARK, FAVICON_HREF } from "./brand.js";
 
 const RELAY = "https://vortex-notes.pages.dev";
+/** The page is served by every relay; examples show the URL of the one serving it. */
+const ORIGIN = "__VORTEX_ORIGIN__";
 
-const MARK = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-<g class="outer" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-<path d="M12 2.75 A9.25 9.25 0 0 1 21.25 12"/>
-<path d="M12 2.75 A9.25 9.25 0 0 1 21.25 12" transform="rotate(120 12 12)"/>
-<path d="M12 2.75 A9.25 9.25 0 0 1 21.25 12" transform="rotate(240 12 12)"/>
-</g>
-<g class="inner" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.5">
-<path d="M12 6.75 A5.25 5.25 0 0 1 17.25 12"/>
-<path d="M12 6.75 A5.25 5.25 0 0 1 17.25 12" transform="rotate(120 12 12)"/>
-<path d="M12 6.75 A5.25 5.25 0 0 1 17.25 12" transform="rotate(240 12 12)"/>
-</g>
-<circle cx="12" cy="12" r="1.6" fill="currentColor"/>
-</svg>`;
+
 
 const code = (text: string) => `<div class="codewrap"><pre>${text}</pre><button class="copy">copy</button></div>`;
 
 // Shared first steps, repeated in each panel so every panel stands alone (and works without JS).
 const CONNECTOR_STEP = `<li>In <a href="/app">the app</a>: user menu (bottom left) → <em>Agents &amp; devices</em> →
   <em>Connect a chat app</em> → name it, pick <em>Read + write</em> or <em>Read-only</em> →
-  <em>Create connector</em> → <em>Copy URL</em>. It looks like <code>${RELAY}/mcp/3f9a…</code>.
+  <em>Create connector</em> → <em>Copy URL</em>. It looks like <code>${ORIGIN}/mcp/3f9a…</code>.
   Treat it like a password.</li>`;
 const PAIR_STEP = `<li>On the machine where the agent runs (Node 20+; SSH is fine):
   ${code("npx -y vortex-notes@latest pair")}</li>
@@ -120,8 +111,8 @@ function pickerHtml(): string {
   return `<div class="picker" role="tablist" aria-label="Where your AI runs">${chips}</div>\n${panels}`;
 }
 
-export function landingShell(nonce: string): string {
-  return `<!doctype html>
+export function landingShell(nonce: string, origin = RELAY): string {
+  return (`<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -131,7 +122,7 @@ export function landingShell(nonce: string): string {
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#121715">
 <meta name="description" content="Shared memory for you and your AI: markdown notes that Claude, ChatGPT and your agents can search and write, end-to-end encrypted, with a revocable key per agent.">
 <title>Vortex Notes — shared memory for you and your AI</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cg stroke='%2314735C' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M12 2.75 A9.25 9.25 0 0 1 21.25 12'/%3E%3Cpath d='M12 2.75 A9.25 9.25 0 0 1 21.25 12' transform='rotate(120 12 12)'/%3E%3Cpath d='M12 2.75 A9.25 9.25 0 0 1 21.25 12' transform='rotate(240 12 12)'/%3E%3C/g%3E%3Ccircle cx='12' cy='12' r='2.2' fill='%2314735C'/%3E%3C/svg%3E">
+<link rel="icon" href="${FAVICON_HREF}">
 <style>
   :root {
     --ground:#F8FAF8; --surface:#FFFFFF; --ink:#1D2421; --ink-soft:#4A554F; --ink-faint:#75817A;
@@ -287,6 +278,7 @@ export function landingShell(nonce: string): string {
     nav.top { position:static; }
     nav.top .in { padding:0.55rem 1.2rem; }
     nav.top .in a.dlink { display:none; }
+    .macdl { display:none !important; } /* a DMG is no use on a phone */
     .page { flex:1; min-height:0; width:100%; display:flex; flex-direction:column; padding:0 1.2rem; }
     section.door { display:none; }
     section.door.active { display:block; flex:1; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:0.4rem 0.2rem 2.5rem; }
@@ -325,7 +317,9 @@ export function landingShell(nonce: string): string {
   <div class="ctarow">
     <a class="cta" href="/app">Open the app →</a>
     <a class="cta ghost" href="#connect">Connect your AI</a>
+    <a class="cta ghost macdl" href="${RELAY}/download/VortexNotes.dmg" download>Download for Mac</a>
   </div>
+  <p class="fine macdl">Mac app: macOS 14 or later · free · beta · notarized by Apple</p>
   <div class="mock" aria-hidden="true">
     <div class="mockbar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
       <span class="mocktitle">${MARK}<b>Vortex</b> Notes</span></div>
@@ -401,8 +395,14 @@ may see. Everything else stays end-to-end encrypted.</p>
 <span class="k">Self-host</span>
 <h2>Or run your own</h2>
 ${code("vortex-notes relay --port 7300 --db ~/relay.db")}
-<p class="fine">That's the whole server: this page, the app, and an append-only log of encrypted changes.
-Point any command at it with <code>--relay</code>. MIT licensed.</p>
+<p class="fine">That's the whole server: this page, the web app, chat-app connectors and an append-only log of
+encrypted changes. Point any command at it with <code>--relay</code>. MIT licensed.</p>
+<ul class="fine">
+  <li><code>--db</code> is where everything lives: back it up.</li>
+  <li>For chat apps, set <code>RELAY_CONNECTOR_KEK</code> (64 hex characters) so their keys are encrypted at rest,
+    and serve it over HTTPS (Caddy, nginx or a tunnel): Claude and ChatGPT can't reach <code>localhost</code>.</li>
+  <li>The Mac and iPhone apps use the hosted server for now.</li>
+</ul>
 </section>
 
 <footer>Vortex Notes · MIT ·
@@ -480,5 +480,5 @@ document.querySelectorAll(".copy").forEach(function (btn) {
 });
 </script>
 </body>
-</html>`;
+</html>`).replaceAll(ORIGIN, origin);
 }

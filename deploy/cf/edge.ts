@@ -23,6 +23,8 @@ export function toRelay(req: Request, env: Env): Promise<Response> {
 
 export const STATIC_PATHS = new Set([
   "/app/bundle.js",
+  "/download/VortexNotes.dmg",
+  "/download/VortexNotes.dmg.sha256",
   "/demo.svg",
   "/app/icon-192.png",
   "/app/icon-512.png",

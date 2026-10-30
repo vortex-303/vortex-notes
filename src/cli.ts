@@ -39,7 +39,9 @@ Usage:
   vortex-notes identity show                    Fingerprint + device info
   vortex-notes space create <name>              Create an encrypted space
   vortex-notes space list                       List spaces on this machine
-  vortex-notes relay [--port <n>] [--db <file>] Run a sync relay (self-host; stores ciphertext only)
+  vortex-notes relay [--port <n>] [--db <file>] Run a sync relay (self-host; stores ciphertext only).
+                                                Data: --db (default ~/.vortex-notes/relay.db). Env:
+                                                RELAY_CONNECTOR_KEK, RELAY_QUOTA_MB, RELAY_ADMIN_ACCOUNT
 
   vortex-notes agent create <name> --space <name|id>[,<more>] --relay <url> [--read-only]
                                                 Grant an agent scoped access; prints its token ONCE
@@ -434,12 +436,21 @@ Wire it into any MCP harness — this single command does everything:`);
       break;
     }
     case "relay": {
-      const { startRelay } = await import("./relay/server.js");
+      const { startRelay, relayOptionsFromEnv } = await import("./relay/server.js");
+      const os = await import("node:os");
+      const pathMod = await import("node:path");
+      // Data lives in a file by default; `--db :memory:` is for throwaway tests only.
+      const dbFlag = (args.flags.get("db") as string | undefined) ?? pathMod.join(os.homedir(), ".vortex-notes", "relay.db");
+      const env = relayOptionsFromEnv();
       const { port } = await startRelay({
         port: Number(args.flags.get("port") ?? 7300),
-        dbPath: (args.flags.get("db") as string) ?? undefined,
+        dbPath: dbFlag === ":memory:" ? undefined : dbFlag,
+        ...env,
       });
       console.log(`Vortex relay on :${port} — ciphertext store only, no keys, no plaintext.`);
+      console.log(`  data: ${dbFlag === ":memory:" ? "in memory (lost on exit)" : dbFlag}`);
+      console.log(`  chat connectors: ${env.connectorKek ? "keys encrypted at rest (RELAY_CONNECTOR_KEK)" : "set RELAY_CONNECTOR_KEK (64 hex) to encrypt their keys at rest"}`);
+      if (env.quotaBytes) console.log(`  quota: ${env.quotaBytes / 1e6}MB per account`);
       break;
     }
     case undefined:

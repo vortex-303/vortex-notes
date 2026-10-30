@@ -8,6 +8,16 @@ import { FAVICON_HREF } from "./brand.js";
 const UPDATED = "2026-10-29";
 const ISSUES = "https://github.com/vortex-303/vortex-notes/issues";
 
+const HOSTED = "https://vortex-notes.pages.dev";
+
+/** On someone else's server these pages are the hosted service's policy, not the operator's: say so. */
+function selfHostNote(origin: string): string {
+  if (origin === HOSTED) return "";
+  return `<p style="border-left:3px solid var(--accent);padding:0.4rem 0.8rem;color:var(--ink-soft)">This server (${origin.replace(/</g, "&lt;")})
+is run by its own operator, not by Vortex Notes. The text below is the policy of the hosted service at
+<a href="${HOSTED}">vortex-notes.pages.dev</a>, shown as a template; ask this server's operator for theirs.</p>`;
+}
+
 function page(title: string, body: string): string {
   return `<!doctype html>
 <html lang="en">
@@ -42,10 +52,10 @@ Vortex Notes is open source (MIT): <a href="https://github.com/vortex-303/vortex
 </html>`;
 }
 
-export function privacyPage(): string {
+export function privacyPage(origin = HOSTED): string {
   return page(
     "Privacy policy",
-    `<p>Vortex Notes is a notes app for you and your AI agents. This policy covers the hosted service at
+    selfHostNote(origin) + `<p>Vortex Notes is a notes app for you and your AI agents. This policy covers the hosted service at
 this address. If you run your own server (<code>vortex-notes relay</code>), this policy doesn't apply to it.</p>
 
 <h2>The short version</h2>
@@ -96,10 +106,10 @@ have it, we can't reset it or recover notes without it.</p>
   );
 }
 
-export function termsPage(): string {
+export function termsPage(origin = HOSTED): string {
   return page(
     "Terms of use",
-    `<p>These terms cover the hosted Vortex Notes service at this address. The software itself is open source
+    selfHostNote(origin) + `<p>These terms cover the hosted Vortex Notes service at this address. The software itself is open source
 under the MIT license; you can run your own server instead.</p>
 
 <h2>Using the service</h2>

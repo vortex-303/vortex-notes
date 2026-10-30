@@ -280,3 +280,13 @@ test("every MCP tool has a title and a read-only or destructive hint (directory 
     assert.ok(t.name.length <= 64);
   }
 });
+
+test("self-host: relay settings come from the environment (as `vortex-notes relay` reads them)", async () => {
+  const { relayOptionsFromEnv } = await import("../src/relay/server.js");
+  const o = relayOptionsFromEnv({ RELAY_CONNECTOR_KEK: "ab".repeat(32), RELAY_QUOTA_MB: "5", RELAY_ADMIN_ACCOUNT: "acct" });
+  assert.equal(o.connectorKek?.length, 32);
+  assert.equal(o.quotaBytes, 5e6);
+  assert.equal(o.adminAccount, "acct");
+  assert.equal(relayOptionsFromEnv({}).connectorKek, undefined);
+  assert.throws(() => relayOptionsFromEnv({ RELAY_CONNECTOR_KEK: "short" }), /64 hex/);
+});

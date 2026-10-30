@@ -12,3 +12,13 @@ undefined/
 identity.json
 dist-cf/
 .wrangler/
+
+# iOS/macOS
+ios/VortexKit/.build/
+ios/**/.swiftpm/
+test/vectors/swift-out.json
+ios/build/
+ios/VortexNotes.xcodeproj/
+
+# Website downloads (built binaries; not committed)
+site-downloads/

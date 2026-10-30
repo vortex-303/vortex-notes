@@ -11,6 +11,7 @@ import Database from "better-sqlite3";
 import { WebSocketServer, WebSocket } from "ws";
 import { createRelayCore, MAX_BODY, type SqlStore } from "./core.js";
 import { openGeo, countryFromReader, clientIp } from "./geo.js";
+import { fromHex } from "../crypto.js";
 
 export interface RelayOptions {
   port: number;
@@ -23,6 +24,23 @@ export interface RelayOptions {
   connectorKek?: Uint8Array;
   /** served at /.well-known/openai-apps-challenge (ChatGPT app directory domain check) */
   openaiAppsChallenge?: string;
+}
+
+/**
+ * Server settings from the environment, shared by `vortex-notes relay` and the container entry
+ * (relay/main.ts): RELAY_CONNECTOR_KEK (64 hex chars; encrypts chat-connector keys at rest),
+ * RELAY_QUOTA_MB, RELAY_ADMIN_ACCOUNT, OPENAI_APPS_CHALLENGE.
+ */
+export function relayOptionsFromEnv(env: NodeJS.ProcessEnv = process.env): Omit<RelayOptions, "port" | "dbPath"> {
+  const kek = env.RELAY_CONNECTOR_KEK?.trim();
+  if (kek && !/^[0-9a-fA-F]{64}$/.test(kek)) throw new Error("RELAY_CONNECTOR_KEK must be 32 bytes as 64 hex characters");
+  const quotaMb = Number(env.RELAY_QUOTA_MB ?? 0);
+  return {
+    quotaBytes: quotaMb > 0 ? quotaMb * 1e6 : undefined,
+    adminAccount: env.RELAY_ADMIN_ACCOUNT || undefined,
+    connectorKek: kek ? fromHex(kek) : undefined,
+    openaiAppsChallenge: env.OPENAI_APPS_CHALLENGE || undefined,
+  };
 }
 
 /** better-sqlite3 binds Buffers, not bare Uint8Arrays. */
