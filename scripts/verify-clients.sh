@@ -56,7 +56,7 @@ owner_has() { own sync --vault "$W/owner" >/dev/null 2>&1; grep -rqs "$1" "$W/ow
 step "2. pair + auto-wiring (temp HOME, real harness binaries on PATH)"
 A="$W/agent-home"; mkdir -p "$A"
 APATH="$W/prefix/bin:$(dirname "$(command -v node)"):$(dirname "$(command -v claude 2>/dev/null || echo /x)"):$(dirname "$(command -v opencode 2>/dev/null || echo /x)"):$(dirname "$(command -v hermes 2>/dev/null || echo /x)"):/usr/bin:/bin"
-(cd "$A" && env -i HOME="$A" PATH="$APATH" VORTEX_NOTES_NO_SEMANTIC=1 "$VN" pair --name verify-agent >"$W/pair.out" 2>&1 &)
+(cd "$A" && env -i HOME="$A" PATH="$APATH" VORTEX_NOTES_NO_SEMANTIC=1 "$VN" pair --name verify-agent --relay "$RELAY" >"$W/pair.out" 2>&1 &)
 for _ in $(seq 1 30); do grep -q "Pairing code" "$W/pair.out" && break; sleep 1; done
 CODE=$(grep "Pairing code" "$W/pair.out" | sed 's/.*code: *//' | tr -d ' ')
 own agent approve "$CODE" --space personal --relay "$RELAY" >/dev/null 2>&1
